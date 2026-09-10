@@ -20,6 +20,7 @@ $sources = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'ArkBoard.exe.config') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $output
+Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Register-ArkBoard.ps1') -Destination $output
 Write-Output "Built: $output\ArkBoard.exe"
 
