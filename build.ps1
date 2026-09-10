@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'dist-arkboard-1.4.2')
+param([string]$OutputDirectory = 'dist-arkboard-1.5.0')
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $frameworkRoot = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'

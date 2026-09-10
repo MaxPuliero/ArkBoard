@@ -17,7 +17,9 @@ namespace ArkBoard
         public event Action ViewChanged;
         internal bool TextToolArmed;
         internal bool TextInputActive;
+        internal string EditingTextId;
         internal event Action<Point, double> TextPlacementRequested;
+        internal event Action<ImageItem> TextEditRequested;
         double placementFontSize = 24;
         readonly Brush background = new SolidColorBrush(Color.FromRgb(25, 25, 25));
         readonly Brush accent = new SolidColorBrush(Color.FromRgb(169, 169, 169));
@@ -92,7 +94,16 @@ namespace ArkBoard
         public ImageItem Hit(Point screen)
         {
             Point world = ToWorld(screen);
-            return Document.Items.LastOrDefault(i => i.Contains(world));
+            return Document.Items.LastOrDefault(i => i.Id != EditingTextId && i.Contains(world));
+        }
+        internal bool TryEditTextAt(Point screen)
+        {
+            ImageItem item = Hit(screen);
+            if (item == null || !item.IsText) return false;
+            FinishGesture();
+            Document.Selected.Clear(); Document.Selected.Add(item.Id); Document.Notify();
+            if (TextEditRequested != null) TextEditRequested(item);
+            return true;
         }
         Point RotationHandle(ImageItem item)
         {
@@ -122,6 +133,7 @@ namespace ArkBoard
             Rect visible = new Rect(ToWorld(new Point(-20, -20)), ToWorld(new Point(ActualWidth + 20, ActualHeight + 20)));
             foreach (ImageItem item in Document.Items)
             {
+                if (item.Id == EditingTextId) continue;
                 if (!visible.IntersectsWith(item.Bounds())) continue;
                 AssetData asset = null;
                 if (!item.IsText && !Document.Assets.TryGetValue(item.Asset, out asset)) continue;
@@ -134,15 +146,19 @@ namespace ArkBoard
             dc.Pop();
             foreach (ImageItem item in Document.Selection)
             {
+                if (item.Id == EditingTextId) continue;
                 Point[] corners = item.Corners().Select(ToScreen).ToArray();
                 Pen pen = new Pen(accent, 1.5);
                 for (int i = 0; i < 4; i++) dc.DrawLine(pen, corners[i], corners[(i + 1) % 4]);
                 if (Document.Selected.Count == 1)
                 {
                     foreach (Point p in corners) dc.DrawRectangle(background, pen, new Rect(p.X - 4, p.Y - 4, 8, 8));
-                    Point top = new Point((corners[0].X + corners[1].X) / 2, (corners[0].Y + corners[1].Y) / 2);
-                    Point handle = RotationHandle(item);
-                    dc.DrawLine(pen, top, handle); dc.DrawEllipse(background, pen, handle, 5, 5);
+                    if (!item.IsText)
+                    {
+                        Point top = new Point((corners[0].X + corners[1].X) / 2, (corners[0].Y + corners[1].Y) / 2);
+                        Point handle = RotationHandle(item);
+                        dc.DrawLine(pen, top, handle); dc.DrawEllipse(background, pen, handle, 5, 5);
+                    }
                 }
             }
             if (!marquee.IsEmpty)
@@ -198,10 +214,11 @@ namespace ArkBoard
                 return;
             }
             if (e.ChangedButton != MouseButton.Left) return;
+            if (e.ClickCount == 2 && TryEditTextAt(startScreen)) { e.Handled = true; return; }
             ImageItem single = Document.Selected.Count == 1 ? Document.Selection.FirstOrDefault() : null;
             if (single != null)
             {
-                if ((RotationHandle(single) - startScreen).Length < 11)
+                if (!single.IsText && (RotationHandle(single) - startScreen).Length < 11)
                 {
                     gesture = "rotate"; transformStart = single.Copy();
                     startAngle = Math.Atan2(startWorld.Y - single.Y, startWorld.X - single.X) * 180 / Math.PI;
@@ -248,7 +265,7 @@ namespace ArkBoard
                 {
                     ImageItem i = Document.Selection.FirstOrDefault();
                     if (i != null && i.Corners().Any(p => (ToScreen(p) - screen).Length < 11)) Cursor = Cursors.SizeNWSE;
-                    else if (i != null && (RotationHandle(i) - screen).Length < 11) Cursor = Cursors.Hand;
+                    else if (i != null && !i.IsText && (RotationHandle(i) - screen).Length < 11) Cursor = Cursors.Hand;
                 }
                 return;
             }

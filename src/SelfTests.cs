@@ -258,6 +258,23 @@ namespace ArkBoard
             double textX = textItem.X;
             window.Document.Change(() => { textItem.X += 75; textItem.Y += 20; });
             Check(Near(textItem.X, textX + 75), "Text objects use normal canvas movement");
+            window.Document.Selected.Clear(); window.Document.Selected.Add(textItem.Id); window.Document.Notify();
+            window.Rotate(90); window.Flip(true);
+            Check(Near(textItem.Rotation, 0) && !textItem.FlipX && !textItem.FlipY,
+                "Text objects ignore rotation and flip commands");
+            int itemsBeforeEdit = window.Document.Items.Count; string textId = textItem.Id, textBeforeEdit = textItem.Text;
+            Check(window.Board.TryEditTextAt(window.Board.ToScreen(new Point(textItem.X, textItem.Y))) &&
+                window.ActiveTextEditor != null && window.ActiveTextEditor.Text == textBeforeEdit && window.Board.EditingTextId == textId,
+                "Double-click text routing reopens the existing object in the native editor");
+            window.ActiveTextEditor.Text += "\nDouble-click editing";
+            textItem = window.CommitText();
+            Check(textItem.Id == textId && window.Document.Items.Count == itemsBeforeEdit && textItem.Text.EndsWith("Double-click editing") &&
+                window.ActiveTextEditor == null && window.Board.EditingTextId == null,
+                "Confirming an edit updates the same text object without creating a duplicate");
+            window.Document.Undo(); textItem = window.Document.Items.Single(i => i.Id == textId);
+            Check(textItem.Text == textBeforeEdit, "Text edits can be undone");
+            window.Document.Redo(); textItem = window.Document.Items.Single(i => i.Id == textId);
+            Check(textItem.Text.EndsWith("Double-click editing"), "Text edits can be redone");
             string textProject = Path.Combine(folder, "Example-with-text.arkboard"); window.Document.Save(textProject);
             var textRead = new BoardDocument(); textRead.Load(textProject);
             Check(textRead.Items.Last().Text == textItem.Text && Near(textRead.Items.Last().FontSize, textItem.FontSize) && Near(textRead.Items.Last().X, textItem.X),

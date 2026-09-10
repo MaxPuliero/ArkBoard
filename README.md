@@ -1,4 +1,4 @@
-# ArkBoard 1.4.2
+# ArkBoard 1.5.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
@@ -9,6 +9,11 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 ## Start
 
 Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible.
+
+## Text editing in 1.5.0
+
+- Double-click a text object to edit its contents in place. Esc or a click outside confirms the edit; an empty edit deletes the object. Text edits operate on the existing object and support undo/redo.
+- Text objects support movement and proportional scaling. Rotation and horizontal/vertical flipping apply only to images; their controls and rotation handle are hidden for a text-only selection.
 
 ## New in 1.4.2
 
@@ -64,6 +69,7 @@ The bottom **Opacity** slider changes the entire window, including images and th
 | Save As | Ctrl+Shift+S |
 | Import images | Ctrl+I |
 | Add text | Ctrl+T |
+| Edit existing text | Double-click the text |
 | Normalize selected image sizes | Ctrl+A |
 | Pack selected images, or all if none selected | Ctrl+P |
 | Select / deselect all | A |
@@ -104,11 +110,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.4.2
-Start-Process .\dist-arkboard-1.4.2\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.4.2' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.5.0
+Start-Process .\dist-arkboard-1.5.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.5.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.4.2`; failures produce `FAILED.txt`. They cover persistence, embedded assets, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.5.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

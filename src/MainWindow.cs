@@ -29,7 +29,9 @@ namespace ArkBoard
         TextBlock opacityValue;
         TextBox rotationBox, scaleBox;
         Button flipXButton, flipYButton;
+        StackPanel rotationSection, flipSection;
         MenuItem undoMenuItem, redoMenuItem;
+        MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
         bool busy;
         bool testMode;
@@ -242,15 +244,16 @@ namespace ArkBoard
             properties = new StackPanel { Margin = new Thickness(0, 18, 0, 0) }; side.Children.Add(properties);
             imageName = Label("", 16, text); imageName.FontWeight = FontWeights.SemiBold; properties.Children.Add(imageName);
             imageInfo = Label("", 12, secondary); imageInfo.Margin = new Thickness(0, 7, 0, 22); properties.Children.Add(imageInfo);
-            properties.Children.Add(Label("Rotation · degrees", 12, secondary));
+            rotationSection = new StackPanel(); properties.Children.Add(rotationSection);
+            rotationSection.Children.Add(Label("Rotation · degrees", 12, secondary));
             rotationBox = new TextBox { Margin = new Thickness(0, 7, 0, 9), ToolTip = "Enter an angle and press Enter" };
             rotationBox.KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { ApplyRotation(); e.Handled = true; } };
-            properties.Children.Add(rotationBox);
+            rotationSection.Children.Add(rotationBox);
             StackPanel rotations = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 19) };
             rotations.Children.Add(Button("−90°", () => Rotate(-90), "Rotate left"));
-            rotations.Children.Add(Button("+90°", () => Rotate(90), "Rotate right")); properties.Children.Add(rotations);
+            rotations.Children.Add(Button("+90°", () => Rotate(90), "Rotate right")); rotationSection.Children.Add(rotations);
             Button resetRotation = Button("Reset Rotation", ResetRotation, "Reset all selected images to 0°");
-            resetRotation.Margin = new Thickness(0, -11, 6, 18); properties.Children.Add(resetRotation);
+            resetRotation.Margin = new Thickness(0, -11, 6, 18); rotationSection.Children.Add(resetRotation);
             properties.Children.Add(Label("Scale · % of original", 12, secondary));
             scaleBox = new TextBox { Margin = new Thickness(0, 7, 0, 9), ToolTip = "Proportional scale: enter a percentage and press Enter" };
             scaleBox.KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { ApplyScale(); e.Handled = true; } };
@@ -261,11 +264,12 @@ namespace ArkBoard
             properties.Children.Add(new Border { Height = 7 });
             properties.Children.Add(Button("Pack Images", PackImages, "Arrange selected images compactly without overlaps · Ctrl+P"));
             properties.Children.Add(new Border { Height = 21 });
-            properties.Children.Add(Label("Flip", 12, secondary));
+            flipSection = new StackPanel(); properties.Children.Add(flipSection);
+            flipSection.Children.Add(Label("Flip", 12, secondary));
             StackPanel flips = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 20) };
             flipXButton = Button("↔  X", () => Flip(true), "Flip horizontally · H");
             flipYButton = Button("↕  Y", () => Flip(false), "Flip vertically · V");
-            flips.Children.Add(flipXButton); flips.Children.Add(flipYButton); properties.Children.Add(flips);
+            flips.Children.Add(flipXButton); flips.Children.Add(flipYButton); flipSection.Children.Add(flips);
             properties.Children.Add(Button("Bring to Front", () => Reorder(true), "Bring selected images to front · ]"));
             properties.Children.Add(new Border { Height = 7 });
             properties.Children.Add(Button("Send to Back", () => Reorder(false), "Send selected images to back · ["));
@@ -276,7 +280,7 @@ namespace ArkBoard
             side.Children.Add(new Border { Height = 30 });
             side.Children.Add(new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 0, 0, 20) });
             side.Children.Add(Label("QUICK CONTROLS", 11, secondary));
-            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nCircle handle     Rotate\nShift     Snap rotation to 15°\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
+            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nDouble-click text     Edit text\nCircle handle     Rotate images\nShift     Snap rotation to 15°\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
             tips.LineHeight = 23; tips.Margin = new Thickness(0, 10, 0, 0); side.Children.Add(tips);
         }
         void BuildStatus()
@@ -327,10 +331,10 @@ namespace ArkBoard
             menu.Items.Add(MenuAction("Duplicate", "Ctrl+D", Duplicate));
             menu.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
             menu.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
-            menu.Items.Add(MenuAction("Flip Horizontally", "H", () => Flip(true)));
-            menu.Items.Add(MenuAction("Flip Vertically", "V", () => Flip(false)));
-            menu.Items.Add(MenuAction("Rotate 90°", "", () => Rotate(90)));
-            menu.Items.Add(MenuAction("Reset Rotation", "", ResetRotation));
+            flipXContextItem = MenuAction("Flip Horizontally", "H", () => Flip(true)); menu.Items.Add(flipXContextItem);
+            flipYContextItem = MenuAction("Flip Vertically", "V", () => Flip(false)); menu.Items.Add(flipYContextItem);
+            rotateContextItem = MenuAction("Rotate 90°", "", () => Rotate(90)); menu.Items.Add(rotateContextItem);
+            resetRotationContextItem = MenuAction("Reset Rotation", "", ResetRotation); menu.Items.Add(resetRotationContextItem);
             menu.Items.Add(MenuAction("Delete", "Del", DeleteSelection)); menu.Items.Add(MenuSeparator());
             menu.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false))); Board.ContextMenu = menu;
         }
@@ -342,6 +346,11 @@ namespace ArkBoard
             count.Text = (Document.Items.Count - textCount) + " images" + (textCount > 0 ? " · " + textCount + " texts" : "") + "  ·  " + Document.Selected.Count + " selected";
             undoMenuItem.IsEnabled = Document.CanUndo; redoMenuItem.IsEnabled = Document.CanRedo;
             var items = Document.Selection.ToList(); bool any = items.Count > 0;
+            bool anyImages = items.Any(x => !x.IsText);
+            rotationSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
+            flipSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in new[] { flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem })
+                item.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             Visibility panelVisibility = any ? Visibility.Visible : Visibility.Collapsed;
             if (inspector.Visibility != panelVisibility || inspectorColumn.Width.Value != (any ? 240 : 0))
             {
@@ -370,14 +379,20 @@ namespace ArkBoard
         public void SetStatus(string value) { status.Text = value; }
         void EditSelection(Action<ImageItem> action)
         { if (!Document.Selection.Any()) return; Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in Document.Selection) action(i); }); }
-        void Flip(bool x) { EditSelection(i => { if (x) i.FlipX = !i.FlipX; else i.FlipY = !i.FlipY; }); }
-        void Rotate(double amount) { EditSelection(i => i.Rotation = BoardSurface.NormalizeAngle(i.Rotation + amount)); }
-        internal void ResetRotation() { EditSelection(i => i.Rotation = 0); }
+        void EditImageSelection(Action<ImageItem> action)
+        {
+            ImageItem[] images = Document.Selection.Where(i => !i.IsText).ToArray();
+            if (images.Length == 0) return;
+            Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in images) action(i); });
+        }
+        internal void Flip(bool x) { EditImageSelection(i => { if (x) i.FlipX = !i.FlipX; else i.FlipY = !i.FlipY; }); }
+        internal void Rotate(double amount) { EditImageSelection(i => i.Rotation = BoardSurface.NormalizeAngle(i.Rotation + amount)); }
+        internal void ResetRotation() { EditImageSelection(i => i.Rotation = 0); }
         void ApplyRotation()
         {
             double value;
             if (!Number(rotationBox.Text, out value)) { SetStatus("Enter a valid numeric angle."); return; }
-            Board.Focus(); EditSelection(i => i.Rotation = BoardSurface.NormalizeAngle(value));
+            Board.Focus(); EditImageSelection(i => i.Rotation = BoardSurface.NormalizeAngle(value));
         }
         static bool Number(string s, out double value)
         { return (double.TryParse(s, NumberStyles.Float, CultureInfo.CurrentCulture, out value) || double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) && BoardDocument.Finite(value); }
@@ -587,7 +602,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.4.2\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Drag the circle to rotate; hold Shift to snap to 15°.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.5.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Double-click text to edit it. Text supports movement and proportional scaling only. Drag an image's circle handle to rotate; hold Shift to snap to 15°.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }
