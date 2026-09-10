@@ -1,0 +1,20 @@
+# Build and verification output
+dist*/
+test-output*/
+benchmark-*/
+
+# Packaged releases
+*.zip
+
+# Legacy local artifacts
+RefCanvas.exe.config
+RefCanvas-*-portable.zip
+LEGGIMI.md
+
+# Editor and operating-system files
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+.DS_Store
