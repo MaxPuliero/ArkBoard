@@ -587,7 +587,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.4.1\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Drag the circle to rotate; hold Shift to snap to 15°.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.4.2\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Drag the circle to rotate; hold Shift to snap to 15°.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

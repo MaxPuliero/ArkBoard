@@ -1,4 +1,4 @@
-# ArkBoard 1.4.1
+# ArkBoard 1.4.2
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
@@ -9,6 +9,10 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 ## Start
 
 Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible.
+
+## New in 1.4.2
+
+- Updated the application and `.arkboard` file icon with the revised ArkBoard artwork.
 
 ## Text tool in 1.4.1
 
@@ -100,11 +104,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.4.1
-Start-Process .\dist-arkboard-1.4.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.4.1' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.4.2
+Start-Process .\dist-arkboard-1.4.2\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.4.2' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.4.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.4.2`; failures produce `FAILED.txt`. They cover persistence, embedded assets, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.
