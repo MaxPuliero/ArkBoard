@@ -39,7 +39,8 @@ namespace ArkBoard
         MenuItem undoMenuItem, redoMenuItem;
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
-        MenuItem autoSortingItem;
+        MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
+        readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy;
         bool testMode;
         readonly Brush panel = Brush("#232323");
@@ -132,6 +133,7 @@ namespace ArkBoard
    </Popup></Grid>
    <ControlTemplate.Triggers>
     <Trigger Property='Role' Value='TopLevelHeader'><Setter TargetName='PART_Popup' Property='Placement' Value='Bottom'/><Setter TargetName='check' Property='Width' Value='0'/><Setter TargetName='shortcut' Property='Visibility' Value='Collapsed'/></Trigger>
+    <Trigger Property='Role' Value='SubmenuHeader'><Setter TargetName='shortcut' Property='Text' Value='›'/><Setter TargetName='shortcut' Property='Foreground' Value='#D0D0D0'/></Trigger>
     <Trigger Property='IsHighlighted' Value='True'><Setter TargetName='itemBorder' Property='Background' Value='#444444'/></Trigger>
     <Trigger Property='IsSubmenuOpen' Value='True'><Setter TargetName='itemBorder' Property='Background' Value='#444444'/></Trigger>
     <Trigger Property='IsChecked' Value='True'><Setter TargetName='check' Property='Visibility' Value='Visible'/></Trigger>
@@ -161,6 +163,23 @@ namespace ArkBoard
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='ToolTip'><Setter Property='Background' Value='#363636'/><Setter Property='Foreground' Value='#FFFFFF'/></Style>
+ <Style TargetType='Expander'>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Expander'>
+   <StackPanel>
+    <ToggleButton x:Name='header' Content='{TemplateBinding Header}' IsChecked='{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}' Background='Transparent' BorderThickness='0' Foreground='{TemplateBinding Foreground}' HorizontalContentAlignment='Left' Cursor='Hand'>
+     <ToggleButton.Template><ControlTemplate TargetType='ToggleButton'>
+      <Grid Background='Transparent'><Grid.ColumnDefinitions><ColumnDefinition Width='18'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+       <Border Width='14' Height='14' BorderBrush='#777777' BorderThickness='1' Background='Transparent' VerticalAlignment='Center'><TextBlock x:Name='glyph' Text='+' FontSize='12' Foreground='#A9A9A9' HorizontalAlignment='Center' VerticalAlignment='Center' Margin='0,-2,0,0'/></Border>
+       <ContentPresenter Grid.Column='1' Margin='8,0,0,0' VerticalAlignment='Center'/>
+      </Grid>
+      <ControlTemplate.Triggers><Trigger Property='IsChecked' Value='True'><Setter TargetName='glyph' Property='Text' Value='−'/></Trigger></ControlTemplate.Triggers>
+     </ControlTemplate></ToggleButton.Template>
+    </ToggleButton>
+    <ContentPresenter x:Name='content' ContentSource='Content' Margin='{TemplateBinding Padding}'/>
+   </StackPanel>
+   <ControlTemplate.Triggers><Trigger Property='IsExpanded' Value='False'><Setter TargetName='content' Property='Visibility' Value='Collapsed'/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
  <Style TargetType='Slider'>
   <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Slider'>
    <Grid Height='22' Background='Transparent'>
@@ -178,8 +197,42 @@ namespace ArkBoard
         Separator MenuSeparator() { return new Separator { Style = (Style)Resources[typeof(Separator)] }; }
         MenuItem MenuAction(string title, string shortcut, Action action)
         {
-            MenuItem item = new MenuItem { Header = title, InputGestureText = shortcut };
+            MenuItem item = new MenuItem { Header = Localization.T(title), InputGestureText = shortcut, Tag = title };
             item.Click += delegate { if (!busy) action(); }; return item;
+        }
+        MenuItem MenuHeader(string title)
+        { return new MenuItem { Header = Localization.T(title), Tag = title }; }
+        void AddLanguage(MenuItem parent, string title, UiLanguage language)
+        {
+            MenuItem item = MenuHeader(title); item.IsCheckable = true; item.IsChecked = Localization.Current == language;
+            item.Click += delegate { SetLanguage(language); };
+            languageItems.Add(item); parent.Items.Add(item);
+        }
+        internal void SetLanguage(UiLanguage language)
+        {
+            Localization.Current = language;
+            for (int i = 0; i < languageItems.Count; i++) languageItems[i].IsChecked = i == (int)language;
+            LocalizeTree(Root);
+            if (Board.ContextMenu != null) LocalizeTree(Board.ContextMenu);
+            layersUiKey = null; Refresh(); Board.InvalidateVisual();
+            SetStatus(language == UiLanguage.Italian ? "Lingua impostata su Italiano" : language == UiLanguage.Japanese ? "表示言語を日本語に変更しました" : "Language set to English");
+        }
+        void LocalizeTree(DependencyObject root)
+        {
+            FrameworkElement element = root as FrameworkElement;
+            string key = element == null ? null : element.Tag as string;
+            if (!string.IsNullOrEmpty(key))
+            {
+                TextBlock block = element as TextBlock; if (block != null) block.Text = Localization.T(key);
+                Button button = element as Button; if (button != null) button.Content = Localization.T(key);
+                MenuItem menu = element as MenuItem; if (menu != null) menu.Header = Localization.T(key);
+                Expander expander = element as Expander; if (expander != null) expander.Header = Localization.T(key);
+            }
+            foreach (object child in LogicalTreeHelper.GetChildren(root))
+            {
+                DependencyObject dependency = child as DependencyObject;
+                if (dependency != null) LocalizeTree(dependency);
+            }
         }
         void BuildMenu()
         {
@@ -188,7 +241,7 @@ namespace ArkBoard
                 Foreground = Brush("#C2C2C2"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 24, 0) };
             bar.Children.Add(brand);
             Menu menu = new Menu(); bar.Children.Add(menu);
-            MenuItem file = new MenuItem { Header = "_File" }; menu.Items.Add(file);
+            MenuItem file = MenuHeader("_File"); menu.Items.Add(file);
             file.Items.Add(MenuAction("New Project", "Ctrl+N", NewProject));
             file.Items.Add(MenuAction("Open Project...", "Ctrl+O", OpenDialog));
             file.Items.Add(MenuAction("Save", "Ctrl+S", () => Save(false)));
@@ -196,7 +249,7 @@ namespace ArkBoard
             file.Items.Add(MenuSeparator());
             file.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
             file.Items.Add(MenuSeparator()); file.Items.Add(MenuAction("Exit", "Alt+F4", Close));
-            MenuItem edit = new MenuItem { Header = "_Edit" }; menu.Items.Add(edit);
+            MenuItem edit = MenuHeader("_Edit"); menu.Items.Add(edit);
             edit.Items.Add(MenuAction("Undo", "Ctrl+Z", Document.Undo));
             edit.Items.Add(MenuAction("Redo", "Ctrl+Y", Document.Redo));
             edit.Items.Add(MenuSeparator());
@@ -211,40 +264,48 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Reset Rotation", "Alt+R", ResetRotation));
             edit.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
             edit.Items.Add(MenuAction("Delete Selection", "Del", DeleteSelection));
-            MenuItem view = new MenuItem { Header = "_View" }; menu.Items.Add(view);
+            MenuItem view = MenuHeader("_View"); menu.Items.Add(view);
             view.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
             view.Items.Add(MenuAction("Fit Selection", "Shift+F", () => Board.Fit(true)));
             view.Items.Add(MenuAction("Zoom 100%", "1", () => Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1)));
             view.Items.Add(MenuAction("Opacity 100%", "Ctrl+Shift+0", () => SetWindowOpacity(100)));
-            gridItem = new MenuItem { Header = "Grid", IsCheckable = true, IsChecked = true };
+            gridItem = MenuHeader("Grid"); gridItem.IsCheckable = true; gridItem.IsChecked = true;
             gridItem.Click += delegate { Board.ShowGrid = gridItem.IsChecked; Board.InvalidateVisual(); }; view.Items.Add(gridItem);
-            topmostItem = new MenuItem { Header = "Always on Top", IsCheckable = true };
+            topmostItem = MenuHeader("Always on Top"); topmostItem.IsCheckable = true;
             topmostItem.Click += delegate { Topmost = topmostItem.IsChecked; }; view.Items.Add(topmostItem);
-            MenuItem settings = new MenuItem { Header = "_Settings" }; menu.Items.Add(settings);
-            autoSortingItem = new MenuItem { Header = "Auto-Sorting", IsCheckable = true, IsChecked = true };
+            MenuItem settings = MenuHeader("_Settings"); menu.Items.Add(settings);
+            autoSortingItem = MenuHeader("Auto-Sorting"); autoSortingItem.IsCheckable = true; autoSortingItem.IsChecked = true;
             autoSortingItem.Click += delegate
             {
                 Board.AutoSorting = autoSortingItem.IsChecked;
                 SetStatus("Auto-sorting " + (Board.AutoSorting ? "enabled" : "disabled"));
             };
             settings.Items.Add(autoSortingItem);
-            MenuItem help = new MenuItem { Header = "_Help" }; menu.Items.Add(help);
-            help.Items.Add(MenuAction("Controls and About", "F1", Help));
+            invertDragZoomItem = MenuHeader("Invert Alt + Middle Drag Zoom"); invertDragZoomItem.IsCheckable = true;
+            invertDragZoomItem.Click += delegate { Board.InvertDragZoom = invertDragZoomItem.IsChecked; };
+            settings.Items.Add(invertDragZoomItem);
+            languageMenu = MenuHeader("Language"); settings.Items.Add(languageMenu);
+            AddLanguage(languageMenu, "English", UiLanguage.English);
+            AddLanguage(languageMenu, "Italian", UiLanguage.Italian);
+            AddLanguage(languageMenu, "Japanese", UiLanguage.Japanese);
+            MenuItem help = MenuHeader("_Help"); menu.Items.Add(help);
+            help.Items.Add(MenuAction("About ArkBoard", "", Help));
             Root.Children.Add(bar);
         }
         Button Button(string label, Action action, string tooltip)
         {
-            Button b = new Button { Content = label, ToolTip = tooltip };
+            Button b = new Button { Content = Localization.T(label), ToolTip = tooltip, Tag = label };
             b.Click += delegate { if (!busy) { action(); Board.Focus(); } }; return b;
         }
         TextBlock Label(string value, double size, Brush color)
-        { return new TextBlock { Text = value, FontSize = size, Foreground = color, TextWrapping = TextWrapping.Wrap }; }
+        { return new TextBlock { Text = Localization.T(value), Tag = string.IsNullOrEmpty(value) ? null : value, FontSize = size, Foreground = color, TextWrapping = TextWrapping.Wrap }; }
         Grid QuickControl(string shortcut, string action)
         {
             var row = new Grid { Width = 294, Margin = new Thickness(0, 2, 0, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(116) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            TextBlock key = Label(shortcut, 11, secondary); TextBlock description = Label(action, 11, secondary);
+            TextBlock key = new TextBlock { Text = shortcut, FontSize = 11, Foreground = secondary, TextWrapping = TextWrapping.Wrap };
+            TextBlock description = Label(action, 11, secondary);
             Grid.SetColumn(description, 1); row.Children.Add(key); row.Children.Add(description); return row;
         }
         void BuildWorkspace()
@@ -265,13 +326,14 @@ namespace ArkBoard
             textToolButton.Background = Brush("#323232"); textToolButton.Foreground = Brush("#B0B0B0");
             System.Windows.Automation.AutomationProperties.SetName(textToolButton, "Text tool");
             Panel.SetZIndex(textToolButton, 20); area.Children.Add(textToolButton);
-            quickControlsExpander = new Expander { Header = "QUICK CONTROLS", IsExpanded = true, Foreground = secondary,
-                Background = Brush("#191919"), Padding = new Thickness(8), Width = 310,
+            quickControlsExpander = new Expander { Header = Localization.T("QUICK CONTROLS"), Tag = "QUICK CONTROLS", IsExpanded = true, Foreground = secondary,
+                Background = Brush("#D9191919"), Padding = new Thickness(8), Width = 310,
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 0, 6) };
             var quickPanel = new StackPanel { Margin = new Thickness(0, 7, 0, 0) };
             quickPanel.Children.Add(QuickControl("Wheel", "Zoom at cursor"));
             quickPanel.Children.Add(QuickControl("Space + drag", "Pan canvas"));
             quickPanel.Children.Add(QuickControl("Middle drag", "Pan canvas"));
+            quickPanel.Children.Add(QuickControl("Alt + middle drag", "Vertical drag zoom"));
             quickPanel.Children.Add(QuickControl("Ctrl + click", "Multi-select"));
             quickPanel.Children.Add(QuickControl("Drag empty space", "Select"));
             quickPanel.Children.Add(QuickControl("Corners", "Proportional resize"));
@@ -337,7 +399,7 @@ namespace ArkBoard
             Grid.SetColumn(delete, 1); operations.Children.Add(duplicate); operations.Children.Add(delete); properties.Children.Add(operations);
             layersSeparator = new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 30, 0, 20) };
             properties.Children.Add(layersSeparator);
-            layersExpander = new Expander { Header = "LAYERS", Foreground = text, Margin = new Thickness(0, 0, 0, 4), IsExpanded = true };
+            layersExpander = new Expander { Header = Localization.T("LAYERS"), Tag = "LAYERS", Foreground = text, Margin = new Thickness(0, 0, 0, 4), IsExpanded = true };
             layersList = new StackPanel { Margin = new Thickness(7, 9, 0, 3) }; layersExpander.Content = layersList;
             properties.Children.Add(layersExpander);
         }
@@ -403,7 +465,7 @@ namespace ArkBoard
         {
             Title = (Document.Dirty ? "● " : "") + (Document.Path == null ? "Untitled" : Path.GetFileName(Document.Path)) + " — ArkBoard";
             int textCount = Document.Items.Count(i => i.IsText);
-            count.Text = (Document.Items.Count - textCount) + " images" + (textCount > 0 ? " · " + textCount + " texts" : "") + "  ·  " + Document.Selected.Count + " selected";
+            count.Text = (Document.Items.Count - textCount) + " " + Localization.T("Images") + (textCount > 0 ? " · " + textCount + " " + Localization.T("Texts") : "") + "  ·  " + Document.Selected.Count + " " + Localization.T("Selected");
             undoMenuItem.IsEnabled = Document.CanUndo; redoMenuItem.IsEnabled = Document.CanRedo;
             var items = Document.Selection.ToList(); bool any = items.Count > 0;
             bool anyImages = items.Any(x => !x.IsText);
@@ -424,14 +486,14 @@ namespace ArkBoard
             }
             properties.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
             emptyInspector.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
-            selectionTitle.Text = any ? "SELECTION / " + items.Count : "SELECTION";
+            selectionTitle.Text = Localization.T("SELECTION") + (any ? " / " + items.Count : "");
             if (any)
             {
                 ImageItem i = items[0]; Size original = OriginalSize(i);
-                imageName.Text = items.Count == 1 ? (i.IsText ? "Text" : i.Name ?? "Image") : items.Count + " objects";
-                if (items.Count > 1) imageInfo.Text = "Transforms apply to the selection";
+                imageName.Text = items.Count == 1 ? (i.IsText ? Localization.T("Text") : i.Name ?? Localization.T("Image")) : items.Count + " " + Localization.T("objects");
+                if (items.Count > 1) imageInfo.Text = Localization.T("Transforms apply to the selection");
                 else if (i.IsText) imageInfo.Text = "Segoe UI · " + (i.FontSize * i.Width / original.Width).ToString("0.#") + " canvas units\nText object";
-                else { AssetData a = Document.Assets[i.Asset]; imageInfo.Text = a.Bitmap.PixelWidth + " × " + a.Bitmap.PixelHeight + " px  ·  " + (a.Bytes.Length / 1024.0).ToString("N0") + " KB\nEmbedded " + (a.IsPsd ? "PSD · " + a.Psd.Layers.Count + " layers" : "image") + (i.HasMask ? " · Masked" : ""); }
+                else { AssetData a = Document.Assets[i.Asset]; imageInfo.Text = a.Bitmap.PixelWidth + " × " + a.Bitmap.PixelHeight + " px  ·  " + (a.Bytes.Length / 1024.0).ToString("N0") + " KB\nEmbedded " + (a.IsPsd ? "PSD · " + a.Psd.Layers.Count + " " + Localization.T("layers") : Localization.T("Image")) + (i.HasMask ? " · " + Localization.T("Masked") : ""); }
                 if (!rotationBox.IsKeyboardFocused) rotationBox.Text = items.Count == 1 ? i.Rotation.ToString("0.##") : "";
                 if (!scaleBox.IsKeyboardFocused) scaleBox.Text = items.Count == 1 ? (100 * i.Width / original.Width).ToString("0.##") : "";
                 flipXButton.Background = items.All(x => x.FlipX) ? Brush("#484848") : Brush("#323232");
@@ -439,7 +501,7 @@ namespace ArkBoard
             }
             RefreshView();
         }
-        public void SetStatus(string value) { status.Text = value; }
+        public void SetStatus(string value) { status.Text = Localization.T(value); }
         void RefreshPsdLayers(List<ImageItem> selection)
         {
             ImageItem item = selection.Count == 1 && !selection[0].IsText ? selection[0] : null;
@@ -451,7 +513,7 @@ namespace ArkBoard
             string key = item.Id + "|" + string.Concat(item.LayerVisibility.Select(v => v ? '1' : '0'));
             if (layersUiKey == key) return;
             layersUiKey = key; layersList.Children.Clear();
-            for (int index = 0; index < asset.Psd.Layers.Count; index++)
+            for (int index = asset.Psd.Layers.Count - 1; index >= 0; index--)
             {
                 int layerIndex = index;
                 var check = new CheckBox { Content = asset.Psd.Layers[index].Name, IsChecked = item.LayerVisibility[index],
@@ -468,7 +530,7 @@ namespace ArkBoard
             if (!asset.IsPsd || item.LayerVisibility == null || layerIndex < 0 || layerIndex >= item.LayerVisibility.Count) return;
             if (item.LayerVisibility[layerIndex] == visible) return;
             Document.Change(() => item.LayerVisibility[layerIndex] = visible);
-            SetStatus(asset.Psd.Layers[layerIndex].Name + (visible ? " visible" : " hidden"));
+            SetStatus(asset.Psd.Layers[layerIndex].Name + " " + Localization.T(visible ? "visible" : "hidden"));
         }
         void EditSelection(Action<ImageItem> action)
         { if (!Document.Selection.Any()) return; Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in Document.Selection) action(i); }); }
@@ -553,8 +615,8 @@ namespace ArkBoard
         {
             CommitText();
             if (!Document.Dirty) return true;
-            MessageBoxResult result = MessageBox.Show(this, "Save changes to this project?", "ArkBoard", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            return result == MessageBoxResult.No || (result == MessageBoxResult.Yes && Save(false));
+            bool? result = DarkDialog.ConfirmSave(this);
+            return result == false || (result == true && Save(false));
         }
         void NewProject() { if (ConfirmDiscard()) { Board.FinishGesture(); Document.Reset(); SetStatus("New Project"); } }
         void OpenDialog()
@@ -735,7 +797,14 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.8.1\n\nPortable reference canvas for Windows.\n\nThe compact selection sidebar groups rotation, scale, flip and object actions, with PSD layers at the bottom. Quick Controls is a collapsible panel at the bottom-left of the canvas and starts open.\n\nDrop images from File Explorer or a browser. Basic 8-bit RGB PSD files expose their raster layers in the selection panel; each layer can be toggled on or off. The original PSD remains embedded.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image.\n\nAlt+S resets scale to 100%. Alt+R resets rotation. Alt+M removes the mask. Ctrl+C / Ctrl+V preserves masks, transforms and PSD layer visibility inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO, PSD and first GIF frame. WebP depends on installed Windows codecs.\n\nPSD support covers standard PSD, RGB 8-bit raster layers and raw/RLE pixels. Blend modes, effects, Photoshop masks, adjustment layers, smart objects, 16/32-bit documents, ZIP-compressed layers and PSB are not interpreted.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            string message;
+            if (Localization.Current == UiLanguage.Italian)
+                message = "ArkBoard 1.9.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+            else if (Localization.Current == UiLanguage.Japanese)
+                message = "ArkBoard 1.9.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+            else
+                message = "ArkBoard 1.9.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+            DarkDialog.ShowAbout(this, message);
         }
     }
 }

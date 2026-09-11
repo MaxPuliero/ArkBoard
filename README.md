@@ -1,10 +1,24 @@
-# ArkBoard 1.8.1
+# ArkBoard 1.9.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Interface and navigation in 1.9.0
+
+- **Settings → Language** switches the interface immediately between English, Italian and Japanese.
+- **Alt + middle-button drag** zooms vertically. Down zooms in by default; **Settings → Invert Alt + Middle Drag Zoom** reverses it.
+- Double-clicking empty canvas space fits the complete board.
+- PSD layer names follow Photoshop's visual stacking order. A selected layered image uses a double outline so it remains easy to identify.
+- Help and the unsaved-changes confirmation now use ArkBoard's dark square-edged UI. Help presents compatible files, Windows support, the MIT license and the GitHub repository without a shortcut list.
+- Quick Controls and Layers use square outline-only expanders. `AGENTS.md` records architecture, build and release context for future development sessions.
+
+## Quick Controls backplate in 1.8.2
+
+- The Quick Controls backplate is 85% opaque, allowing the canvas to remain visible beneath it while keeping the shortcut text readable.
+- Backdrop blur is intentionally omitted because WPF would need to render the covered canvas a second time, which would add continuous rendering cost on large boards.
 
 ## Compact sidebar in 1.8.1
 
@@ -79,7 +93,7 @@ Confirmed text becomes a movable canvas object and supports resizing, duplicatio
 - **Normalize Size — Ctrl+A:** available in the selection panel, Edit menu and context menu. Select at least two images. Each image's longest side becomes the arithmetic mean of the selected images' current longest sides. For example, images with longest sides of 200 and 800 become 500 each. Aspect ratios, centers, rotations and flips are preserved. Original file resolution does not determine the target size.
 - **Pack Images — Ctrl+P:** available in the selection panel, Edit menu and context menu. Packs selected images into a compact layout; with nothing selected, it packs the whole board. Uses rotated bounding rectangles with a 16-unit gap. It preserves dimensions, rotations, flips and stacking order. Unselected images stay in place and are not treated as packing obstacles. Packing is a heuristic, not a guarantee of the mathematically smallest possible layout.
 - **A toggles Select All / Deselect All.** With a partial selection, A selects every image; with all images selected, A clears the selection. Holding A does not repeatedly toggle. Ctrl+A still selects text normally while editing a text field.
-- All application interface text, tooltips, help and application-authored errors are in English. Native file dialogs and system messages may follow your Windows language. Numeric input continues to accept your regional decimal format.
+- The application interface can be switched between English, Italian and Japanese. Native file dialogs and some Windows-authored messages may follow the system language. Numeric input continues to accept the regional decimal format.
 - Normalize and Pack are separate, undoable operations. Normalize does not rearrange images; Pack does not resize them.
 
 ## Working with images
@@ -92,7 +106,7 @@ To mask an image, hover it and hold **Shift** to reveal the small handles center
 
 Ctrl+click adds/removes images from the selection. Drag empty canvas space for a selection rectangle. The side panel appears only when an image is selected. Its controls apply to all selected images; transform handles are shown for a single selection.
 
-Scroll to zoom under the cursor. Space+drag or middle-button drag pans the canvas. **View → Always on Top** keeps the window above other applications.
+Scroll to zoom under the cursor. Space+drag or middle-button drag pans the canvas. Alt+middle-button drag zooms vertically; dragging down zooms in by default, and the Settings toggle reverses that direction. Double-click empty canvas space to fit the complete board. **View → Always on Top** keeps the window above other applications.
 
 The bottom **Opacity** slider changes the entire window, including images and the title bar, from 100% to 5%. The **100%** button or **Ctrl+Shift+0** restores full opacity while the application is active. Opacity resets to 100% at startup and is not saved into projects.
 
@@ -134,7 +148,6 @@ Saving writes a temporary file beside the destination and replaces the project a
 ## Limits
 
 - Supports PNG, JPEG, BMP, TIFF, ICO, basic 8-bit RGB PSD layers and the first GIF frame. WebP depends on installed Windows WIC codecs. SVG, PSB, video and animation are not supported.
-- Does not read/write PureRef `.pur` projects.
 - Ctrl+C copies one original image. Use Ctrl+D to duplicate multiple selected images with their transforms.
 - Multiple-image transforms operate around each image's own center; there is no group transform handle.
 - Up to 100 images per import, 100 MB and 80 megapixels per image. Web downloads are limited to 50 MB with a timeout.
@@ -146,11 +159,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.8.1
-Start-Process .\dist-arkboard-1.8.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.8.1' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.9.0
+Start-Process .\dist-arkboard-1.9.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.9.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.8.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, compact sidebar layout, Quick Controls expansion, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.9.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, localized UI, drag-zoom direction, compact sidebar layout, Quick Controls expansion, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

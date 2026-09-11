@@ -7,6 +7,7 @@ using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Input;
@@ -286,8 +287,19 @@ namespace ArkBoard
             Check(RenderOptions.GetBitmapScalingMode(window.Board) == BitmapScalingMode.HighQuality, "Full-quality bitmap sampling returns after interaction settles");
             double fullCanvasWidth = window.Board.ActualWidth;
             Check(window.quickControlsExpander.IsExpanded && window.quickControlsExpander.VerticalAlignment == VerticalAlignment.Bottom &&
-                window.quickControlsExpander.HorizontalAlignment == HorizontalAlignment.Left,
-                "Quick Controls starts expanded at the bottom-left of the canvas");
+                window.quickControlsExpander.HorizontalAlignment == HorizontalAlignment.Left &&
+                ((SolidColorBrush)window.quickControlsExpander.Background).Color.A == 217,
+                "Quick Controls starts expanded at the bottom-left with an 85 percent opaque backplate");
+            Check(window.Resources[typeof(Expander)] is Style && ((Style)window.Resources[typeof(Expander)]).Setters.Count > 0,
+                "Quick Controls and Layers use the square outline expander style");
+            Check(BoardSurface.DragZoomTarget(1, 180, false) > 2.7 && BoardSurface.DragZoomTarget(1, 180, true) < .38,
+                "Alt plus middle-button vertical drag zooms down by default and supports inversion");
+            window.SetLanguage(UiLanguage.Italian);
+            Check((string)window.quickControlsExpander.Header == "COMANDI RAPIDI", "Italian UI can be selected at runtime");
+            window.SetLanguage(UiLanguage.Japanese);
+            Check((string)window.layersExpander.Header == "レイヤー", "Japanese UI can be selected at runtime");
+            Capture(window, Path.Combine(folder, "ui-japanese.png"));
+            window.SetLanguage(UiLanguage.English);
             window.quickControlsExpander.IsExpanded = false;
             Check(!window.quickControlsExpander.IsExpanded, "Quick Controls can be collapsed to its header");
             Capture(window, Path.Combine(folder, "ui-quick-controls-collapsed.png"));
@@ -475,6 +487,8 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Check(window.layersExpander.Visibility == Visibility.Visible && window.layersList.Children.Count == 2,
                 "Selecting one PSD exposes its layer visibility list in the inspector");
+            Check((string)((CheckBox)window.layersList.Children[0]).Content == psd.Psd.Layers[psd.Psd.Layers.Count - 1].Name,
+                "PSD layers are listed in the same visual order as Photoshop");
             window.SetPsdLayerVisibility(uiPsd.Id, 0, false);
             Check(!uiPsd.LayerVisibility[0] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
                 "The inspector layer toggle updates the selected PSD instance");
@@ -484,6 +498,9 @@ namespace ArkBoard
             window.ResetSize(); Check(Near(uiPsd.Width, 2) && Near(uiPsd.Height, 2), "Reset scale restores 100 percent dimensions for Alt+S");
             window.ResetRotation(); Check(Near(uiPsd.Rotation, 0), "Reset rotation restores zero degrees for Alt+R");
             window.RemoveMask(); Check(!uiPsd.HasMask, "Reset mask restores the full image for Alt+M");
+            window.Document.Zoom = 2; window.Document.PanX = 140; window.Document.PanY = 80;
+            Check(window.Board.FitOnEmptyDoubleClick(new Point(window.Board.ActualWidth - 8, window.Board.ActualHeight - 8), 2) && !Near(window.Document.Zoom, 2),
+                "Double-clicking empty canvas fits the entire board");
             window.Close();
             File.WriteAllLines(Path.Combine(folder, "results.txt"), checks.Concat(new[] { "", checks.Count + " checks passed." }));
         }

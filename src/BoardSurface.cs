@@ -15,6 +15,7 @@ namespace ArkBoard
         public readonly BoardDocument Document;
         public bool ShowGrid = true;
         public bool AutoSorting = true;
+        public bool InvertDragZoom;
         public bool SpaceDown;
         internal bool ShiftPreview;
         internal string HoveredImageId;
@@ -39,7 +40,7 @@ namespace ArkBoard
         ImageItem transformStart;
         Point anchor;
         Vector diagonal;
-        double startAngle;
+        double startAngle, startZoom;
         int maskEdge = -1;
         string draggedItemId;
         bool checkpoint;
@@ -123,6 +124,11 @@ namespace ArkBoard
             Document.Selected.Clear(); Document.Selected.Add(item.Id); Document.Notify();
             if (TextEditRequested != null) TextEditRequested(item);
             return true;
+        }
+        internal bool FitOnEmptyDoubleClick(Point screen, int clickCount)
+        {
+            if (clickCount != 2 || Hit(screen) != null) return false;
+            Fit(false); return true;
         }
         internal Point[] RotationHandles(ImageItem item)
         {
@@ -274,6 +280,20 @@ namespace ArkBoard
                 bool maskEditing = maskControls && item.HasMask;
                 Pen outerPen = maskEditing ? new Pen(accent, 1.5) { DashStyle = DashStyles.Dash } : pen;
                 for (int i = 0; i < 4; i++) dc.DrawLine(outerPen, corners[i], corners[(i + 1) % 4]);
+                AssetData selectedAsset;
+                bool layeredSelection = selected && !item.IsText && Document.Assets.TryGetValue(item.Asset, out selectedAsset) && selectedAsset.IsPsd;
+                if (layeredSelection)
+                {
+                    double inset = 4 / Math.Max(.01, Document.Zoom);
+                    if (item.Width > inset * 2 && item.Height > inset * 2)
+                    {
+                        Rect inner = new Rect(-item.Width / 2 + inset, -item.Height / 2 + inset, item.Width - inset * 2, item.Height - inset * 2);
+                        Matrix matrix = item.Matrix;
+                        Point[] innerCorners = new[] { inner.TopLeft, inner.TopRight, inner.BottomRight, inner.BottomLeft }
+                            .Select(p => ToScreen(matrix.Transform(p))).ToArray();
+                        for (int side = 0; side < 4; side++) dc.DrawLine(pen, innerCorners[side], innerCorners[(side + 1) % 4]);
+                    }
+                }
                 if ((selected && Document.Selected.Count == 1) || maskControls)
                 {
                     if (selected && Document.Selected.Count == 1)
@@ -312,9 +332,9 @@ namespace ArkBoard
                 dc.DrawLine(p, new Point(cx + 2, cy - 72), new Point(cx + 11, cy - 83));
                 dc.DrawLine(p, new Point(cx + 11, cy - 83), new Point(cx + 21, cy - 66));
                 dc.DrawEllipse(null, p, new Point(cx + 13, cy - 91), 3, 3);
-                DrawCentered(dc, "A space for your ideas", 24, Brushes.WhiteSmoke, cy - 28);
-                DrawCentered(dc, "Drop images here from your computer or browser", 14, muted, cy + 14);
-                DrawCentered(dc, "or press Ctrl+I to import and Ctrl+V to paste", 12, muted, cy + 42);
+                DrawCentered(dc, Localization.T("A space for your ideas"), 24, Brushes.WhiteSmoke, cy - 28);
+                DrawCentered(dc, Localization.T("Drop images here from your computer or browser"), 14, muted, cy + 14);
+                DrawCentered(dc, Localization.T("or press Ctrl+I to import and Ctrl+V to paste"), 12, muted, cy + 42);
             }
         }
         void DrawCentered(DrawingContext dc, string text, double size, Brush brush, double y)
@@ -337,6 +357,8 @@ namespace ArkBoard
                 gesture = "textsize"; placementFontSize = Math.Max(1, Math.Min(8192, 24 / Document.Zoom));
                 CaptureMouse(); e.Handled = true; InvalidateVisual(); return;
             }
+            if (e.ChangedButton == MouseButton.Middle && (Keyboard.Modifiers & ModifierKeys.Alt) != 0)
+            { gesture = "dragzoom"; startZoom = Document.Zoom; Cursor = Cursors.SizeNS; CaptureMouse(); e.Handled = true; return; }
             if (e.ChangedButton == MouseButton.Middle || (e.ChangedButton == MouseButton.Left && SpaceDown))
             { gesture = "pan"; Cursor = Cursors.ScrollAll; CaptureMouse(); e.Handled = true; return; }
             if (e.ChangedButton == MouseButton.Right)
@@ -348,6 +370,7 @@ namespace ArkBoard
             }
             if (e.ChangedButton != MouseButton.Left) return;
             if (e.ClickCount == 2 && TryEditTextAt(startScreen)) { e.Handled = true; return; }
+            if (FitOnEmptyDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if (!shiftDown) MaskEditingId = null;
             ImageItem single = Document.Selected.Count == 1 ? Document.Selection.FirstOrDefault() : null;
@@ -444,6 +467,10 @@ namespace ArkBoard
                 Document.PanX += delta.X; Document.PanY += delta.Y;
                 if (ViewChanged != null) ViewChanged();
             }
+            else if (gesture == "dragzoom")
+            {
+                ZoomAt(startScreen, DragZoomTarget(startZoom, screen.Y - startScreen.Y, InvertDragZoom));
+            }
             else if (gesture == "marquee")
             {
                 marquee = new Rect(startScreen, screen);
@@ -499,6 +526,8 @@ namespace ArkBoard
             if (HoveredImageId != null) { HoveredImageId = null; InvalidateVisual(); }
         }
         public static double NormalizeAngle(double angle) { return ((angle % 360) + 360) % 360; }
+        internal static double DragZoomTarget(double initialZoom, double verticalDelta, bool inverted)
+        { return Math.Max(.01, Math.Min(16, initialZoom * Math.Exp(verticalDelta * (inverted ? -1 : 1) / 180.0))); }
         protected override void OnMouseUp(MouseButtonEventArgs e)
         {
             if (gesture == "textsize" && e.ChangedButton == MouseButton.Left)
