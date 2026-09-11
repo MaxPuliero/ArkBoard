@@ -1,10 +1,15 @@
-# ArkBoard 1.9.0
+# ArkBoard 1.9.1
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## PSD compositing fix in 1.9.1
+
+- PSD raster layers now render in the same stacking order shown by Photoshop and the ArkBoard sidebar. A higher layer such as `retouch` correctly appears over a lower background layer while both remain enabled.
+- The language choices are always labeled **English / Italiano / 日本語**, independently of the active interface language.
 
 ## Interface and navigation in 1.9.0
 
@@ -159,12 +164,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.9.0
-Start-Process .\dist-arkboard-1.9.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.9.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.9.1
+Start-Process .\dist-arkboard-1.9.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.9.1' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.9.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, localized UI, drag-zoom direction, compact sidebar layout, Quick Controls expansion, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.9.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, localized UI, drag-zoom direction, compact sidebar layout, Quick Controls expansion, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.
-

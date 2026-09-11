@@ -40,7 +40,7 @@ namespace ArkBoard
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
-        readonly List<MenuItem> languageItems = new List<MenuItem>();
+        internal readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy;
         bool testMode;
         readonly Brush panel = Brush("#232323");
@@ -204,7 +204,7 @@ namespace ArkBoard
         { return new MenuItem { Header = Localization.T(title), Tag = title }; }
         void AddLanguage(MenuItem parent, string title, UiLanguage language)
         {
-            MenuItem item = MenuHeader(title); item.IsCheckable = true; item.IsChecked = Localization.Current == language;
+            MenuItem item = new MenuItem { Header = title, IsCheckable = true, IsChecked = Localization.Current == language };
             item.Click += delegate { SetLanguage(language); };
             languageItems.Add(item); parent.Items.Add(item);
         }
@@ -286,8 +286,8 @@ namespace ArkBoard
             settings.Items.Add(invertDragZoomItem);
             languageMenu = MenuHeader("Language"); settings.Items.Add(languageMenu);
             AddLanguage(languageMenu, "English", UiLanguage.English);
-            AddLanguage(languageMenu, "Italian", UiLanguage.Italian);
-            AddLanguage(languageMenu, "Japanese", UiLanguage.Japanese);
+            AddLanguage(languageMenu, "Italiano", UiLanguage.Italian);
+            AddLanguage(languageMenu, "日本語", UiLanguage.Japanese);
             MenuItem help = MenuHeader("_Help"); menu.Items.Add(help);
             help.Items.Add(MenuAction("About ArkBoard", "", Help));
             Root.Children.Add(bar);
@@ -799,11 +799,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.9.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.9.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.9.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.9.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.9.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.9.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

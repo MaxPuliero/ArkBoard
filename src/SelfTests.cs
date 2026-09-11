@@ -78,8 +78,9 @@ namespace ArkBoard
                     layerWriter.Write((byte)label.Length); layerWriter.Write(label);
                     for (int p = label.Length + 1; p < paddedName; p++) layerWriter.Write((byte)0);
                 };
-                record("Top Red", top); record("Bottom Blue", bottom);
-                foreach (byte[] channel in top.Concat(bottom)) layerWriter.Write(channel);
+                // PSD layer records are ordered bottom-to-top.
+                record("Bottom Blue", bottom); record("Top Red", top);
+                foreach (byte[] channel in bottom.Concat(top)) layerWriter.Write(channel);
                 byte[] layerInfo = layerInfoStream.ToArray();
                 using (var maskStream = new MemoryStream()) using (var maskWriter = new BinaryWriter(maskStream))
                 {
@@ -134,15 +135,15 @@ namespace ArkBoard
             Check(blue.Bitmap.PixelWidth == 600 && blue.Bitmap.PixelHeight == 400, "PNG decode preserves source dimensions");
             Check(AssetData.Create(blue.Bytes).Key == blue.Key, "Identical images have identical content hashes");
             AssetData psd = AssetData.Create(SamplePsd());
-            Check(psd.IsPsd && psd.Psd.Layers.Count == 2 && psd.Psd.Layers[0].Name == "Top Red" && psd.Psd.Layers[1].Name == "Bottom Blue",
+            Check(psd.IsPsd && psd.Psd.Layers.Count == 2 && psd.Psd.Layers[0].Name == "Bottom Blue" && psd.Psd.Layers[1].Name == "Top Red",
                 "Basic PSD import reads named raster layers with raw and PackBits channel data");
             var psdDoc = new BoardDocument(); ImageItem psdItem = psdDoc.Add(psd, "Layers.psd", new Point(40, 40));
             Check(psdItem.LayerVisibility.SequenceEqual(new[] { true, true }) && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
                 "PSD import initializes Photoshop layer visibility and composites the top layer");
-            psdDoc.Change(() => psdItem.LayerVisibility[0] = false);
+            psdDoc.Change(() => psdItem.LayerVisibility[1] = false);
             Check(Pixel(psd.BitmapFor(psdItem), 0, 0).B > 240, "Turning off a PSD layer reveals the layer below it");
             psdDoc.Undo(); psdItem = psdDoc.Items.Single();
-            Check(psdItem.LayerVisibility[0] && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
+            Check(psdItem.LayerVisibility[1] && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
                 "PSD layer visibility changes can be undone without sharing mutable state");
             psdDoc.Redo(); psdItem = psdDoc.Items.Single();
             string psdProject = Path.Combine(folder, "psd-layers.arkboard"); psdDoc.Save(psdProject);
@@ -150,12 +151,12 @@ namespace ArkBoard
                 Check(((Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(entry)).Version == 4,
                     "Projects containing PSD layer state use manifest version 4");
             var psdRead = new BoardDocument(); psdRead.Load(psdProject);
-            Check(psdRead.Items.Single().LayerVisibility.SequenceEqual(new[] { false, true }) && psdRead.Assets.Single().Value.IsPsd &&
+            Check(psdRead.Items.Single().LayerVisibility.SequenceEqual(new[] { true, false }) && psdRead.Assets.Single().Value.IsPsd &&
                 Pixel(psdRead.Assets.Single().Value.BitmapFor(psdRead.Items.Single()), 0, 0).B > 240,
                 "ArkBoard projects embed PSD source data and preserve per-item layer visibility");
             ImageItem psdClipboardItem; AssetData psdClipboardAsset;
             DataObject psdClipboard = ArkBoardClipboard.Create(psdRead.Items.Single(), psdRead.Assets.Single().Value);
-            Check(ArkBoardClipboard.TryRead(psdClipboard, out psdClipboardItem, out psdClipboardAsset) && !psdClipboardItem.LayerVisibility[0] &&
+            Check(ArkBoardClipboard.TryRead(psdClipboard, out psdClipboardItem, out psdClipboardAsset) && !psdClipboardItem.LayerVisibility[1] &&
                 Pixel(psdClipboard.GetImage(), 0, 0).B > 240,
                 "ArkBoard and standard bitmap clipboard data preserve the current PSD layer composite");
             var doc = new BoardDocument(); doc.Checkpoint();
@@ -298,6 +299,8 @@ namespace ArkBoard
             Check((string)window.quickControlsExpander.Header == "COMANDI RAPIDI", "Italian UI can be selected at runtime");
             window.SetLanguage(UiLanguage.Japanese);
             Check((string)window.layersExpander.Header == "レイヤー", "Japanese UI can be selected at runtime");
+            Check(window.languageItems.Select(item => (string)item.Header).SequenceEqual(new[] { "English", "Italiano", "日本語" }),
+                "Language choices keep their native labels independently of the active UI language");
             Capture(window, Path.Combine(folder, "ui-japanese.png"));
             window.SetLanguage(UiLanguage.English);
             window.quickControlsExpander.IsExpanded = false;
@@ -489,11 +492,11 @@ namespace ArkBoard
                 "Selecting one PSD exposes its layer visibility list in the inspector");
             Check((string)((CheckBox)window.layersList.Children[0]).Content == psd.Psd.Layers[psd.Psd.Layers.Count - 1].Name,
                 "PSD layers are listed in the same visual order as Photoshop");
-            window.SetPsdLayerVisibility(uiPsd.Id, 0, false);
-            Check(!uiPsd.LayerVisibility[0] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
-                "The inspector layer toggle updates the selected PSD instance");
             uiPsd.Width = 420; uiPsd.Height = 420; window.Document.Notify(); window.Board.Fit(false);
             Capture(window, Path.Combine(folder, "ui-psd-layers.png"));
+            window.SetPsdLayerVisibility(uiPsd.Id, 1, false);
+            Check(!uiPsd.LayerVisibility[1] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
+                "The inspector layer toggle updates the selected PSD instance");
             uiPsd.Width /= 2; uiPsd.Height /= 2; uiPsd.Rotation = 61; uiPsd.MaskLeft = .2;
             window.ResetSize(); Check(Near(uiPsd.Width, 2) && Near(uiPsd.Height, 2), "Reset scale restores 100 percent dimensions for Alt+S");
             window.ResetRotation(); Check(Near(uiPsd.Rotation, 0), "Reset rotation restores zero degrees for Alt+R");

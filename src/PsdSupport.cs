@@ -95,7 +95,9 @@ namespace ArkBoard
             using (DrawingContext dc = visual.RenderOpen())
             {
                 dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, Width, Height));
-                for (int index = Layers.Count - 1; index >= 0; index--)
+                // PSD layer records are stored from the bottom of the stack to the top.
+                // Draw in that order so every later (higher) layer composites over it.
+                for (int index = 0; index < Layers.Count; index++)
                 {
                     PsdLayer layer = Layers[index];
                     bool visible = visibility == null || visibility.Count != Layers.Count ? layer.DefaultVisible : visibility[index];
