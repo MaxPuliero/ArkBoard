@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -28,7 +29,7 @@ namespace ArkBoard
                 json = Encoding.UTF8.GetString(stream.ToArray());
             }
             var data = new DataObject();
-            data.SetData(Format, json); data.SetImage(asset.Bitmap); return data;
+            data.SetData(Format, json); data.SetImage(asset.BitmapFor(item)); return data;
         }
 
         internal static bool TryRead(IDataObject data, out ImageItem item, out AssetData asset)
@@ -46,7 +47,10 @@ namespace ArkBoard
                     payload.Item.Width < .01 || payload.Item.Height < .01 || payload.Item.Width > 1000000 || payload.Item.Height > 1000000 ||
                     !BoardDocument.Finite(payload.Item.Width) || !BoardDocument.Finite(payload.Item.Height) ||
                     !BoardDocument.ValidMask(payload.Item)) return false;
-                asset = AssetData.Create(payload.Bytes); item = payload.Item; item.Asset = asset.Key; return true;
+                asset = AssetData.Create(payload.Bytes); item = payload.Item; item.Asset = asset.Key;
+                if (item.LayerVisibility != null && (asset.Psd == null || item.LayerVisibility.Count != asset.Psd.Layers.Count)) return false;
+                if (asset.Psd != null && item.LayerVisibility == null) item.LayerVisibility = asset.Psd.Layers.Select(l => l.DefaultVisible).ToList();
+                return true;
             }
             catch { item = null; asset = null; return false; }
         }

@@ -1,10 +1,19 @@
-# ArkBoard 1.7.1
+# ArkBoard 1.8.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## PSD layers and reset shortcuts in 1.8.0
+
+- Import a standard **8-bit RGB PSD** and select it to open **PSD Layers** in the inspector. Each supported raster layer has an ON/OFF checkbox.
+- Layer visibility belongs to each canvas object, supports undo/redo and copy/paste, and is saved with the embedded original PSD in the `.arkboard` project.
+- **Alt+S** resets scale to 100%, **Alt+R** resets rotation to 0°, and **Alt+M** removes the non-destructive ArkBoard mask.
+- PSD support is deliberately basic: raw and PackBits/RLE raster channels are composited normally. Photoshop blend modes, effects, layer masks, adjustment layers, smart objects, 16/32-bit documents, ZIP-compressed layer channels and PSB are not interpreted.
+
+![ArkBoard PSD layer controls](docs/arkboard-psd-layers.png)
 
 ## Selection controls in 1.7.1
 
@@ -105,11 +114,12 @@ The bottom **Opacity** slider changes the entire window, including images and th
 | Zoom 100% / Increase / Decrease | 1 / + / − |
 | Bring to front / Send to back | ] / [ |
 | Restore 100% opacity | Ctrl+Shift+0 |
+| Reset scale / rotation / mask | Alt+S / Alt+R / Alt+M |
 | Help | F1 |
 
 ## Project format
 
-**.arkboard is a standard ZIP archive** containing `manifest.json` and `assets/<sha256>.<extension>`. Manifest version 1 records image layout, version 2 adds text, and version 3 adds non-destructive image-mask insets. Transforms apply local flips, clockwise rotation in degrees, then translation. Positions are canvas units.
+**.arkboard is a standard ZIP archive** containing `manifest.json` and `assets/<sha256>.<extension>`. Manifest version 1 records image layout, version 2 adds text, version 3 adds non-destructive image-mask insets, and version 4 adds per-object PSD layer visibility. Transforms apply local flips, clockwise rotation in degrees, then translation. Positions are canvas units.
 
 Original image bytes are preserved and ZIP-compressed without additional lossy compression. JPEG/PNG files are already compressed and may not become much smaller. Clipboard bitmaps are stored as PNG. Identical image assets are stored only once, even when used multiple times. Projects never depend on external file paths or URLs. To extract images, open a copy of the project as a ZIP.
 
@@ -117,7 +127,7 @@ Saving writes a temporary file beside the destination and replaces the project a
 
 ## Limits
 
-- Supports PNG, JPEG, BMP, TIFF, ICO and the first GIF frame. WebP depends on installed Windows WIC codecs. SVG, video and animation are not supported.
+- Supports PNG, JPEG, BMP, TIFF, ICO, basic 8-bit RGB PSD layers and the first GIF frame. WebP depends on installed Windows WIC codecs. SVG, PSB, video and animation are not supported.
 - Does not read/write PureRef `.pur` projects.
 - Ctrl+C copies one original image. Use Ctrl+D to duplicate multiple selected images with their transforms.
 - Multiple-image transforms operate around each image's own center; there is no group transform handle.
@@ -130,11 +140,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.7.1
-Start-Process .\dist-arkboard-1.7.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.7.1' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.8.0
+Start-Process .\dist-arkboard-1.8.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.8.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.7.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.8.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

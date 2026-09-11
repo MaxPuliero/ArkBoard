@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.Serialization.Json;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -36,6 +37,70 @@ namespace ArkBoard
             var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(visual); bitmap.Freeze();
             return AssetData.FromBitmap(bitmap);
         }
+        static void Be16(BinaryWriter writer, int value) { writer.Write((byte)(value >> 8)); writer.Write((byte)value); }
+        static void Be32(BinaryWriter writer, int value)
+        { writer.Write((byte)(value >> 24)); writer.Write((byte)(value >> 16)); writer.Write((byte)(value >> 8)); writer.Write((byte)value); }
+        static byte[] PsdChannel(byte[] pixels, bool rle)
+        {
+            using (var stream = new MemoryStream()) using (var writer = new BinaryWriter(stream))
+            {
+                Be16(writer, rle ? 1 : 0);
+                if (!rle) writer.Write(pixels);
+                else
+                {
+                    Be16(writer, 3); Be16(writer, 3);
+                    writer.Write((byte)1); writer.Write(pixels, 0, 2);
+                    writer.Write((byte)1); writer.Write(pixels, 2, 2);
+                }
+                return stream.ToArray();
+            }
+        }
+        static byte[] SamplePsd()
+        {
+            byte[][] top = { PsdChannel(new byte[] { 255, 255, 255, 255 }, false), PsdChannel(new byte[4], false),
+                PsdChannel(new byte[4], false), PsdChannel(new byte[] { 255, 255, 255, 255 }, false) };
+            byte[][] bottom = { PsdChannel(new byte[4], true), PsdChannel(new byte[4], true),
+                PsdChannel(new byte[] { 255, 255, 255, 255 }, true), PsdChannel(new byte[] { 255, 255, 255, 255 }, true) };
+            using (var layerInfoStream = new MemoryStream()) using (var layerWriter = new BinaryWriter(layerInfoStream))
+            {
+                Be16(layerWriter, 2);
+                Action<string, byte[][]> record = (name, channels) =>
+                {
+                    Be32(layerWriter, 0); Be32(layerWriter, 0); Be32(layerWriter, 2); Be32(layerWriter, 2);
+                    Be16(layerWriter, 4);
+                    int[] ids = { 0, 1, 2, -1 };
+                    for (int c = 0; c < 4; c++) { Be16(layerWriter, ids[c]); Be32(layerWriter, channels[c].Length); }
+                    layerWriter.Write(Encoding.ASCII.GetBytes("8BIMnorm"));
+                    layerWriter.Write((byte)255); layerWriter.Write((byte)0); layerWriter.Write((byte)0); layerWriter.Write((byte)0);
+                    byte[] label = Encoding.ASCII.GetBytes(name); int paddedName = ((label.Length + 1 + 3) / 4) * 4;
+                    Be32(layerWriter, 8 + paddedName); Be32(layerWriter, 0); Be32(layerWriter, 0);
+                    layerWriter.Write((byte)label.Length); layerWriter.Write(label);
+                    for (int p = label.Length + 1; p < paddedName; p++) layerWriter.Write((byte)0);
+                };
+                record("Top Red", top); record("Bottom Blue", bottom);
+                foreach (byte[] channel in top.Concat(bottom)) layerWriter.Write(channel);
+                byte[] layerInfo = layerInfoStream.ToArray();
+                using (var maskStream = new MemoryStream()) using (var maskWriter = new BinaryWriter(maskStream))
+                {
+                    Be32(maskWriter, layerInfo.Length); maskWriter.Write(layerInfo); if ((layerInfo.Length & 1) != 0) maskWriter.Write((byte)0); Be32(maskWriter, 0);
+                    byte[] layerMask = maskStream.ToArray();
+                    using (var file = new MemoryStream()) using (var writer = new BinaryWriter(file))
+                    {
+                        writer.Write(Encoding.ASCII.GetBytes("8BPS")); Be16(writer, 1); writer.Write(new byte[6]); Be16(writer, 4);
+                        Be32(writer, 2); Be32(writer, 2); Be16(writer, 8); Be16(writer, 3);
+                        Be32(writer, 0); Be32(writer, 0); Be32(writer, layerMask.Length); writer.Write(layerMask);
+                        Be16(writer, 0); writer.Write(new byte[16]);
+                        return file.ToArray();
+                    }
+                }
+            }
+        }
+        static Color Pixel(BitmapSource bitmap, int x, int y)
+        {
+            BitmapSource source = bitmap.Format == PixelFormats.Bgra32 ? bitmap : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+            byte[] pixel = new byte[4]; source.CopyPixels(new Int32Rect(x, y, 1, 1), pixel, 4, 0);
+            return Color.FromArgb(pixel[3], pixel[2], pixel[1], pixel[0]);
+        }
         static void Capture(MainWindow window, string path)
         {
             window.Root.UpdateLayout();
@@ -67,6 +132,31 @@ namespace ArkBoard
             AssetData green = Sample(640, 360, Color.FromRgb(55, 139, 129), "03 / ATMOSPHERE");
             Check(blue.Bitmap.PixelWidth == 600 && blue.Bitmap.PixelHeight == 400, "PNG decode preserves source dimensions");
             Check(AssetData.Create(blue.Bytes).Key == blue.Key, "Identical images have identical content hashes");
+            AssetData psd = AssetData.Create(SamplePsd());
+            Check(psd.IsPsd && psd.Psd.Layers.Count == 2 && psd.Psd.Layers[0].Name == "Top Red" && psd.Psd.Layers[1].Name == "Bottom Blue",
+                "Basic PSD import reads named raster layers with raw and PackBits channel data");
+            var psdDoc = new BoardDocument(); ImageItem psdItem = psdDoc.Add(psd, "Layers.psd", new Point(40, 40));
+            Check(psdItem.LayerVisibility.SequenceEqual(new[] { true, true }) && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
+                "PSD import initializes Photoshop layer visibility and composites the top layer");
+            psdDoc.Change(() => psdItem.LayerVisibility[0] = false);
+            Check(Pixel(psd.BitmapFor(psdItem), 0, 0).B > 240, "Turning off a PSD layer reveals the layer below it");
+            psdDoc.Undo(); psdItem = psdDoc.Items.Single();
+            Check(psdItem.LayerVisibility[0] && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
+                "PSD layer visibility changes can be undone without sharing mutable state");
+            psdDoc.Redo(); psdItem = psdDoc.Items.Single();
+            string psdProject = Path.Combine(folder, "psd-layers.arkboard"); psdDoc.Save(psdProject);
+            using (var file = File.OpenRead(psdProject)) using (var zip = new ZipArchive(file, ZipArchiveMode.Read)) using (var entry = zip.GetEntry("manifest.json").Open())
+                Check(((Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(entry)).Version == 4,
+                    "Projects containing PSD layer state use manifest version 4");
+            var psdRead = new BoardDocument(); psdRead.Load(psdProject);
+            Check(psdRead.Items.Single().LayerVisibility.SequenceEqual(new[] { false, true }) && psdRead.Assets.Single().Value.IsPsd &&
+                Pixel(psdRead.Assets.Single().Value.BitmapFor(psdRead.Items.Single()), 0, 0).B > 240,
+                "ArkBoard projects embed PSD source data and preserve per-item layer visibility");
+            ImageItem psdClipboardItem; AssetData psdClipboardAsset;
+            DataObject psdClipboard = ArkBoardClipboard.Create(psdRead.Items.Single(), psdRead.Assets.Single().Value);
+            Check(ArkBoardClipboard.TryRead(psdClipboard, out psdClipboardItem, out psdClipboardAsset) && !psdClipboardItem.LayerVisibility[0] &&
+                Pixel(psdClipboard.GetImage(), 0, 0).B > 240,
+                "ArkBoard and standard bitmap clipboard data preserve the current PSD layer composite");
             var doc = new BoardDocument(); doc.Checkpoint();
             ImageItem first = doc.Add(blue, "Test blu.png", new Point(100, 200)); doc.Selected.Add(first.Id);
             Check(Near(first.Width / first.Height, 1.5), "Import preserves aspect ratio");
@@ -372,6 +462,21 @@ namespace ArkBoard
             Check(window.Document.Items.Count == beforeClipboardPaste + 1 && pastedMask.HasMask && Near(pastedMask.MaskLeft, .3) &&
                 Near(pastedMask.X, 50) && Near(pastedMask.Y, 75),
                 "Pasting ArkBoard clipboard data creates a new image while preserving its mask");
+            window.Document.Reset();
+            ImageItem uiPsd = window.Document.Add(psd, "Layers.psd", new Point(320, 260));
+            window.Document.Selected.Add(uiPsd.Id); window.Document.Notify(); window.Board.Fit(false);
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            Check(window.layersExpander.Visibility == Visibility.Visible && window.layersList.Children.Count == 2,
+                "Selecting one PSD exposes its layer visibility list in the inspector");
+            window.SetPsdLayerVisibility(uiPsd.Id, 0, false);
+            Check(!uiPsd.LayerVisibility[0] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
+                "The inspector layer toggle updates the selected PSD instance");
+            uiPsd.Width = 420; uiPsd.Height = 420; window.Document.Notify(); window.Board.Fit(false);
+            Capture(window, Path.Combine(folder, "ui-psd-layers.png"));
+            uiPsd.Width /= 2; uiPsd.Height /= 2; uiPsd.Rotation = 61; uiPsd.MaskLeft = .2;
+            window.ResetSize(); Check(Near(uiPsd.Width, 2) && Near(uiPsd.Height, 2), "Reset scale restores 100 percent dimensions for Alt+S");
+            window.ResetRotation(); Check(Near(uiPsd.Rotation, 0), "Reset rotation restores zero degrees for Alt+R");
+            window.RemoveMask(); Check(!uiPsd.HasMask, "Reset mask restores the full image for Alt+M");
             window.Close();
             File.WriteAllLines(Path.Combine(folder, "results.txt"), checks.Concat(new[] { "", checks.Count + " checks passed." }));
         }

@@ -253,7 +253,7 @@ namespace ArkBoard
                 else
                 {
                     dc.PushClip(new RectangleGeometry(item.VisibleRect));
-                    dc.DrawRectangle(imageBackground, null, rect); dc.DrawImage(asset.Bitmap, rect); dc.Pop();
+                    dc.DrawRectangle(imageBackground, null, rect); dc.DrawImage(asset.BitmapFor(item), rect); dc.Pop();
                 }
                 dc.Pop();
             }

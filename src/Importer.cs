@@ -24,7 +24,7 @@ namespace ArkBoard
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             var c = new HttpClient(); c.Timeout = TimeSpan.FromSeconds(30);
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("ArkBoard/1.7"); return c;
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("ArkBoard/1.8"); return c;
         }
         public static bool CanRead(IDataObject data)
         {

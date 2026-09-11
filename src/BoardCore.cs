@@ -31,6 +31,7 @@ namespace ArkBoard
         [DataMember(EmitDefaultValue = false)] public double MaskTop;
         [DataMember(EmitDefaultValue = false)] public double MaskRight;
         [DataMember(EmitDefaultValue = false)] public double MaskBottom;
+        [DataMember(EmitDefaultValue = false)] public List<bool> LayerVisibility;
         public bool IsText { get { return Text != null; } }
         public bool HasMask { get { return !IsText && (MaskLeft > 0 || MaskTop > 0 || MaskRight > 0 || MaskBottom > 0); } }
         public Rect VisibleRect
@@ -41,7 +42,12 @@ namespace ArkBoard
                     Width * (1 - MaskLeft - MaskRight), Height * (1 - MaskTop - MaskBottom));
             }
         }
-        public ImageItem Copy() { return (ImageItem)MemberwiseClone(); }
+        public ImageItem Copy()
+        {
+            ImageItem copy = (ImageItem)MemberwiseClone();
+            if (LayerVisibility != null) copy.LayerVisibility = new List<bool>(LayerVisibility);
+            return copy;
+        }
         public Matrix Matrix
         {
             get
@@ -97,12 +103,19 @@ namespace ArkBoard
         public string Key;
         public byte[] Bytes;
         public BitmapSource Bitmap;
+        public PsdDocument Psd;
+        readonly Dictionary<string, BitmapSource> psdComposites = new Dictionary<string, BitmapSource>();
+        public bool IsPsd { get { return Psd != null; } }
         public static AssetData Create(byte[] bytes)
         {
             if (bytes == null || bytes.Length == 0 || bytes.LongLength > MaxBytes)
                 throw new InvalidDataException("Image is empty or exceeds 100 MB.");
-            BitmapFrame frame;
-            using (MemoryStream stream = new MemoryStream(bytes, false))
+            BitmapSource frame; PsdDocument psd = null;
+            if (bytes.Length >= 4 && bytes[0] == 56 && bytes[1] == 66 && bytes[2] == 80 && bytes[3] == 83)
+            {
+                psd = PsdDocument.Read(bytes); frame = psd.Compose(null);
+            }
+            else using (MemoryStream stream = new MemoryStream(bytes, false))
             {
                 BitmapDecoder decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
                 frame = decoder.Frames[0];
@@ -113,7 +126,20 @@ namespace ArkBoard
             string hash;
             using (SHA256 sha = SHA256.Create())
                 hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
-            return new AssetData { Key = hash + Extension(bytes), Bytes = bytes, Bitmap = frame };
+            return new AssetData { Key = hash + Extension(bytes), Bytes = bytes, Bitmap = frame, Psd = psd };
+        }
+        public BitmapSource BitmapFor(ImageItem item)
+        {
+            if (Psd == null || item == null || item.LayerVisibility == null || item.LayerVisibility.Count != Psd.Layers.Count) return Bitmap;
+            string key = string.Concat(item.LayerVisibility.Select(v => v ? '1' : '0'));
+            BitmapSource result;
+            if (!psdComposites.TryGetValue(key, out result))
+            {
+                result = Psd.Compose(item.LayerVisibility);
+                if (psdComposites.Count >= 8) psdComposites.Clear();
+                psdComposites[key] = result;
+            }
+            return result;
         }
         static string Extension(byte[] b)
         {
@@ -124,6 +150,7 @@ namespace ArkBoard
             if (b.Length > 12 && b[8] == 87 && b[9] == 69 && b[10] == 66 && b[11] == 80) return ".webp";
             if (b.Length > 4 && ((b[0] == 73 && b[1] == 73) || (b[0] == 77 && b[1] == 77))) return ".tiff";
             if (b.Length > 4 && b[0] == 0 && b[1] == 0 && b[2] == 1 && b[3] == 0) return ".ico";
+            if (b.Length > 4 && b[0] == 56 && b[1] == 66 && b[2] == 80 && b[3] == 83) return ".psd";
             return ".image";
         }
         public static AssetData FromBitmap(BitmapSource source)
@@ -192,6 +219,7 @@ namespace ArkBoard
             double size = Math.Min(1, 520.0 / Math.Max(asset.Bitmap.PixelWidth, asset.Bitmap.PixelHeight));
             ImageItem item = new ImageItem { Asset = asset.Key, Name = name, X = center.X, Y = center.Y,
                 Width = asset.Bitmap.PixelWidth * size, Height = asset.Bitmap.PixelHeight * size };
+            if (asset.Psd != null) item.LayerVisibility = asset.Psd.Layers.Select(l => l.DefaultVisible).ToList();
             Items.Add(item); return item;
         }
         public ImageItem AddText(string text, double fontSize, Point topLeft)
@@ -212,7 +240,7 @@ namespace ArkBoard
                 using (FileStream file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Create))
                 {
-                    var manifest = new Manifest { Version = Items.Any(i => i.HasMask) ? 3 : Items.Any(i => i.IsText) ? 2 : 1,
+                    var manifest = new Manifest { Version = Items.Any(i => i.LayerVisibility != null) ? 4 : Items.Any(i => i.HasMask) ? 3 : Items.Any(i => i.IsText) ? 2 : 1,
                         Images = Clone(Items), Zoom = Zoom, PanX = PanX, PanY = PanY };
                     using (Stream entry = zip.CreateEntry("manifest.json", CompressionLevel.Optimal).Open())
                         new DataContractJsonSerializer(typeof(Manifest)).WriteObject(entry, manifest);
@@ -239,7 +267,7 @@ namespace ArkBoard
                 ZipArchiveEntry me = zip.GetEntry("manifest.json");
                 if (me == null || me.Length > 8 * 1024 * 1024) throw new InvalidDataException("Project manifest is missing or too large.");
                 using (Stream stream = me.Open()) manifest = (Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(stream);
-                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || manifest.Version < 1 || manifest.Version > 3 || manifest.Images == null)
+                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || manifest.Version < 1 || manifest.Version > 4 || manifest.Images == null)
                     throw new InvalidDataException("Unsupported project format or version.");
                 if (manifest.Images.Count > 10000) throw new InvalidDataException("Project contains too many images.");
                 var ids = new HashSet<string>();
@@ -266,16 +294,23 @@ namespace ArkBoard
                         throw new InvalidDataException("Invalid image mask.");
                     if (string.IsNullOrEmpty(i.Asset) || i.Asset.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
                         throw new InvalidDataException("Invalid image asset.");
-                    if (assets.ContainsKey(i.Asset)) continue;
-                    ZipArchiveEntry ae = zip.GetEntry("assets/" + i.Asset);
-                    if (ae == null || ae.Length > AssetData.MaxBytes || (total += ae.Length) > 1024L * 1024 * 1024)
-                        throw new InvalidDataException("Missing image asset or project exceeds supported limits.");
-                    using (Stream s = ae.Open())
+                    if (!assets.ContainsKey(i.Asset))
                     {
-                        AssetData asset = AssetData.Create(ReadLimited(s, AssetData.MaxBytes));
-                        if (asset.Key != i.Asset) throw new InvalidDataException("Image asset integrity check failed.");
-                        assets.Add(i.Asset, asset);
+                        ZipArchiveEntry ae = zip.GetEntry("assets/" + i.Asset);
+                        if (ae == null || ae.Length > AssetData.MaxBytes || (total += ae.Length) > 1024L * 1024 * 1024)
+                            throw new InvalidDataException("Missing image asset or project exceeds supported limits.");
+                        using (Stream s = ae.Open())
+                        {
+                            AssetData asset = AssetData.Create(ReadLimited(s, AssetData.MaxBytes));
+                            if (asset.Key != i.Asset) throw new InvalidDataException("Image asset integrity check failed.");
+                            assets.Add(i.Asset, asset);
+                        }
                     }
+                    AssetData itemAsset = assets[i.Asset];
+                    if (i.LayerVisibility != null && (manifest.Version < 4 || itemAsset.Psd == null || i.LayerVisibility.Count != itemAsset.Psd.Layers.Count))
+                        throw new InvalidDataException("Invalid PSD layer visibility data.");
+                    if (itemAsset.Psd != null && i.LayerVisibility == null)
+                        i.LayerVisibility = itemAsset.Psd.Layers.Select(l => l.DefaultVisible).ToList();
                 }
             }
             Items = manifest.Images; Assets = assets; Selected.Clear(); undo.Clear(); redo.Clear();

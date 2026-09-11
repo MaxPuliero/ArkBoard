@@ -31,6 +31,9 @@ namespace ArkBoard
         Button flipXButton, flipYButton;
         Button removeMaskButton;
         StackPanel rotationSection, flipSection;
+        internal Expander layersExpander;
+        internal StackPanel layersList;
+        string layersUiKey;
         MenuItem undoMenuItem, redoMenuItem;
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
@@ -201,6 +204,10 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Select / Deselect All", "A", ToggleSelectAll));
             edit.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
             edit.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
+            edit.Items.Add(MenuSeparator());
+            edit.Items.Add(MenuAction("Reset Scale", "Alt+S", ResetSize));
+            edit.Items.Add(MenuAction("Reset Rotation", "Alt+R", ResetRotation));
+            edit.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
             edit.Items.Add(MenuAction("Delete Selection", "Del", DeleteSelection));
             MenuItem view = new MenuItem { Header = "_View" }; menu.Items.Add(view);
             view.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
@@ -266,15 +273,18 @@ namespace ArkBoard
             StackPanel rotations = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 19) };
             rotations.Children.Add(Button("−90°", () => Rotate(-90), "Rotate left"));
             rotations.Children.Add(Button("+90°", () => Rotate(90), "Rotate right")); rotationSection.Children.Add(rotations);
-            Button resetRotation = Button("Reset Rotation", ResetRotation, "Reset all selected images to 0°");
+            Button resetRotation = Button("Reset Rotation", ResetRotation, "Reset all selected images to 0° · Alt+R");
             resetRotation.Margin = new Thickness(0, -11, 6, 18); rotationSection.Children.Add(resetRotation);
             properties.Children.Add(Label("Scale · % of original", 12, secondary));
             scaleBox = new TextBox { Margin = new Thickness(0, 7, 0, 9), ToolTip = "Proportional scale: enter a percentage and press Enter" };
             scaleBox.KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { ApplyScale(); e.Handled = true; } };
             properties.Children.Add(scaleBox);
-            properties.Children.Add(Button("Original Size", ResetSize, "Restore original width and height"));
-            removeMaskButton = Button("Remove Mask", RemoveMask, "Restore the full area of the selected masked images");
+            properties.Children.Add(Button("Original Size", ResetSize, "Restore original width and height · Alt+S"));
+            removeMaskButton = Button("Remove Mask", RemoveMask, "Restore the full area of the selected masked images · Alt+M");
             removeMaskButton.Margin = new Thickness(0, 7, 6, 0); properties.Children.Add(removeMaskButton);
+            layersExpander = new Expander { Header = "PSD LAYERS", Foreground = text, Margin = new Thickness(0, 17, 0, 4), IsExpanded = true };
+            layersList = new StackPanel { Margin = new Thickness(3, 9, 0, 3) }; layersExpander.Content = layersList;
+            properties.Children.Add(layersExpander);
             properties.Children.Add(new Border { Height = 7 });
             properties.Children.Add(Button("Normalize Size", NormalizeSelected, "Match the average longest side of the selected images · Ctrl+A"));
             properties.Children.Add(new Border { Height = 7 });
@@ -296,7 +306,7 @@ namespace ArkBoard
             side.Children.Add(new Border { Height = 30 });
             side.Children.Add(new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 0, 0, 20) });
             side.Children.Add(Label("QUICK CONTROLS", 11, secondary));
-            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCorner rotation anchors     Rotate images\nShift     Show mask controls / snap rotation\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
+            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCorner rotation anchors     Rotate images\nShift     Show mask controls / snap rotation\nAlt+S / R / M     Reset scale / rotation / mask\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
             tips.LineHeight = 23; tips.Margin = new Thickness(0, 10, 0, 0); side.Children.Add(tips);
         }
         void BuildStatus()
@@ -347,10 +357,12 @@ namespace ArkBoard
             menu.Items.Add(MenuAction("Duplicate", "Ctrl+D", Duplicate));
             menu.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
             menu.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
+            menu.Items.Add(MenuAction("Reset Scale", "Alt+S", ResetSize));
+            menu.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
             flipXContextItem = MenuAction("Flip Horizontally", "H", () => Flip(true)); menu.Items.Add(flipXContextItem);
             flipYContextItem = MenuAction("Flip Vertically", "V", () => Flip(false)); menu.Items.Add(flipYContextItem);
             rotateContextItem = MenuAction("Rotate 90°", "", () => Rotate(90)); menu.Items.Add(rotateContextItem);
-            resetRotationContextItem = MenuAction("Reset Rotation", "", ResetRotation); menu.Items.Add(resetRotationContextItem);
+            resetRotationContextItem = MenuAction("Reset Rotation", "Alt+R", ResetRotation); menu.Items.Add(resetRotationContextItem);
             menu.Items.Add(MenuAction("Delete", "Del", DeleteSelection)); menu.Items.Add(MenuSeparator());
             menu.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false))); Board.ContextMenu = menu;
         }
@@ -367,6 +379,7 @@ namespace ArkBoard
             rotationSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             flipSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             removeMaskButton.Visibility = anyMasks ? Visibility.Visible : Visibility.Collapsed;
+            RefreshPsdLayers(items);
             foreach (MenuItem item in new[] { flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem })
                 item.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             Visibility panelVisibility = any ? Visibility.Visible : Visibility.Collapsed;
@@ -386,7 +399,7 @@ namespace ArkBoard
                 imageName.Text = items.Count == 1 ? (i.IsText ? "Text" : i.Name ?? "Image") : items.Count + " objects";
                 if (items.Count > 1) imageInfo.Text = "Transforms apply to the selection";
                 else if (i.IsText) imageInfo.Text = "Segoe UI · " + (i.FontSize * i.Width / original.Width).ToString("0.#") + " canvas units\nText object";
-                else { AssetData a = Document.Assets[i.Asset]; imageInfo.Text = a.Bitmap.PixelWidth + " × " + a.Bitmap.PixelHeight + " px  ·  " + (a.Bytes.Length / 1024.0).ToString("N0") + " KB\nEmbedded image" + (i.HasMask ? " · Masked" : ""); }
+                else { AssetData a = Document.Assets[i.Asset]; imageInfo.Text = a.Bitmap.PixelWidth + " × " + a.Bitmap.PixelHeight + " px  ·  " + (a.Bytes.Length / 1024.0).ToString("N0") + " KB\nEmbedded " + (a.IsPsd ? "PSD · " + a.Psd.Layers.Count + " layers" : "image") + (i.HasMask ? " · Masked" : ""); }
                 if (!rotationBox.IsKeyboardFocused) rotationBox.Text = items.Count == 1 ? i.Rotation.ToString("0.##") : "";
                 if (!scaleBox.IsKeyboardFocused) scaleBox.Text = items.Count == 1 ? (100 * i.Width / original.Width).ToString("0.##") : "";
                 flipXButton.Background = items.All(x => x.FlipX) ? Brush("#484848") : Brush("#323232");
@@ -395,6 +408,35 @@ namespace ArkBoard
             RefreshView();
         }
         public void SetStatus(string value) { status.Text = value; }
+        void RefreshPsdLayers(List<ImageItem> selection)
+        {
+            ImageItem item = selection.Count == 1 && !selection[0].IsText ? selection[0] : null;
+            AssetData asset = item == null ? null : Document.Assets[item.Asset];
+            bool visible = asset != null && asset.IsPsd;
+            layersExpander.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (!visible) { layersUiKey = null; layersList.Children.Clear(); return; }
+            string key = item.Id + "|" + string.Concat(item.LayerVisibility.Select(v => v ? '1' : '0'));
+            if (layersUiKey == key) return;
+            layersUiKey = key; layersList.Children.Clear();
+            for (int index = 0; index < asset.Psd.Layers.Count; index++)
+            {
+                int layerIndex = index;
+                var check = new CheckBox { Content = asset.Psd.Layers[index].Name, IsChecked = item.LayerVisibility[index],
+                    Foreground = text, Margin = new Thickness(0, 3, 0, 3), ToolTip = "Toggle this raster layer" };
+                check.Click += delegate { SetPsdLayerVisibility(item.Id, layerIndex, check.IsChecked == true); };
+                layersList.Children.Add(check);
+            }
+        }
+        internal void SetPsdLayerVisibility(string itemId, int layerIndex, bool visible)
+        {
+            ImageItem item = Document.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item == null || item.IsText || !Document.Assets.ContainsKey(item.Asset)) return;
+            AssetData asset = Document.Assets[item.Asset];
+            if (!asset.IsPsd || item.LayerVisibility == null || layerIndex < 0 || layerIndex >= item.LayerVisibility.Count) return;
+            if (item.LayerVisibility[layerIndex] == visible) return;
+            Document.Change(() => item.LayerVisibility[layerIndex] = visible);
+            SetStatus(asset.Psd.Layers[layerIndex].Name + (visible ? " visible" : " hidden"));
+        }
         void EditSelection(Action<ImageItem> action)
         { if (!Document.Selection.Any()) return; Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in Document.Selection) action(i); }); }
         void EditImageSelection(Action<ImageItem> action)
@@ -421,7 +463,7 @@ namespace ArkBoard
             Board.Focus(); EditSelection(i => { Size s = OriginalSize(i); i.Width = s.Width * value / 100; i.Height = s.Height * value / 100; });
         }
         Size OriginalSize(ImageItem i) { if (i.IsText) return TextLayout.Measure(i); AssetData a = Document.Assets[i.Asset]; return new Size(a.Bitmap.PixelWidth, a.Bitmap.PixelHeight); }
-        void ResetSize() { EditSelection(i => { Size s = OriginalSize(i); i.Width = s.Width; i.Height = s.Height; }); }
+        internal void ResetSize() { EditSelection(i => { Size s = OriginalSize(i); i.Width = s.Width; i.Height = s.Height; }); }
         internal void RemoveMask()
         {
             ImageItem[] masked = Document.Selection.Where(i => i.HasMask).ToArray(); if (masked.Length == 0) return;
@@ -511,7 +553,7 @@ namespace ArkBoard
         async void ImportDialog()
         {
             var dialog = new OpenFileDialog { Title = "Import Images", Multiselect = true,
-                Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.ico|All files|*.*" };
+                Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.webp;*.ico;*.psd|All files|*.*" };
             if (dialog.ShowDialog(this) == true)
                 await ImportSources(dialog.FileNames.Select(p => new ImportSource { Location = p, Name = Path.GetFileName(p) }).ToList(), Board.CenterWorld);
         }
@@ -606,7 +648,17 @@ namespace ArkBoard
             if (busy || Keyboard.FocusedElement is TextBox || Keyboard.FocusedElement is Slider) return;
             bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
             bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-            if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0) return;
+            bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) != 0;
+            Key shortcutKey = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (alt)
+            {
+                if (ctrl || shift) return;
+                if (shortcutKey == Key.S) ResetSize();
+                else if (shortcutKey == Key.R) ResetRotation();
+                else if (shortcutKey == Key.M) RemoveMask();
+                else return;
+                e.Handled = true; return;
+            }
             if (Board.IsMouseCaptured && e.Key != Key.Space && e.Key != Key.Escape) return;
             if (e.Key == Key.LeftShift || e.Key == Key.RightShift) Board.SetShiftPreview(true);
             bool handled = true;
@@ -650,7 +702,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.7.1\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image. Ctrl+C / Ctrl+V preserves masks inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.8.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. Basic 8-bit RGB PSD files expose their raster layers in the selection panel; each layer can be toggled on or off. The original PSD remains embedded.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image.\n\nAlt+S resets scale to 100%. Alt+R resets rotation. Alt+M removes the mask. Ctrl+C / Ctrl+V preserves masks, transforms and PSD layer visibility inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO, PSD and first GIF frame. WebP depends on installed Windows codecs.\n\nPSD support covers standard PSD, RGB 8-bit raster layers and raw/RLE pixels. Blend modes, effects, Photoshop masks, adjustment layers, smart objects, 16/32-bit documents, ZIP-compressed layers and PSB are not interpreted.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }
