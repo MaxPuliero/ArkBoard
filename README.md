@@ -1,4 +1,4 @@
-# ArkBoard 1.6.0
+# ArkBoard 1.7.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
@@ -9,6 +9,12 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 ## Start
 
 Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible.
+
+## Mask refinement and clipboard in 1.7.0
+
+- **Ctrl+C / Ctrl+V** inside ArkBoard preserves an image's mask, dimensions, rotation and flips. The clipboard also carries a standard bitmap for pasting into other Windows applications.
+- **Shift+click** a masked image to enter mask-adjustment mode. The visible mask has a solid outline and handles; the original image bounding box remains visible with a dashed outline.
+- While mask-adjustment mode is active, **Shift+drag** the visible image to move the mask window inside the original bounds without changing its size. Shift+dragging a mask edge continues to refine that edge.
 
 ## Masking and auto-sorting in 1.6.0
 
@@ -61,7 +67,7 @@ Drag files from File Explorer or images from a browser onto the canvas, use **Ct
 
 Drag an image to move it. Drag a corner to resize proportionally with the opposite corner anchored. Drag the circle handle to rotate; hold Shift for 15-degree steps. Enter rotation or scale in the side panel and press Enter. **Reset Rotation** sets the selected images to 0 degrees without changing size, position or flips. Flip X/Y uses each image's local horizontal/vertical axes.
 
-To mask an image, select it, hold **Shift**, then drag one of the small handles centered on its four edges. Masking clips what ArkBoard displays without cropping or changing the embedded source. The selection outline continues to show the original extent. **Remove Mask** appears in the side panel whenever at least one selected image has a mask.
+To mask an image, select it, hold **Shift**, then drag one of the small handles centered on its four edges. Masking clips what ArkBoard displays without cropping or changing the embedded source. **Shift+click** a masked image to show its solid visible outline inside the dashed original bounds. In this mode, Shift+drag the visible region to reposition the mask or Shift+drag its edge handles to refine it. **Remove Mask** appears in the side panel whenever at least one selected image has a mask.
 
 Ctrl+click adds/removes images from the selection. Drag empty canvas space for a selection rectangle. The side panel appears only when an image is selected. Its controls apply to all selected images; transform handles are shown for a single selection.
 
@@ -82,7 +88,7 @@ The bottom **Opacity** slider changes the entire window, including images and th
 | Pack selected images, or all if none selected | Ctrl+P |
 | Select / deselect all | A |
 | Clear selection | Esc |
-| Copy original image / Paste | Ctrl+C / Ctrl+V |
+| Copy / paste image with ArkBoard mask and transforms | Ctrl+C / Ctrl+V |
 | Duplicate selection with transforms | Ctrl+D |
 | Delete selection | Del |
 | Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z |
@@ -118,11 +124,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.6.0
-Start-Process .\dist-arkboard-1.6.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.6.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.7.0
+Start-Process .\dist-arkboard-1.7.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.7.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.6.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, masking, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.7.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, masking and mask movement, ArkBoard clipboard data, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

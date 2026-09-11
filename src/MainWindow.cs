@@ -292,7 +292,7 @@ namespace ArkBoard
             side.Children.Add(new Border { Height = 30 });
             side.Children.Add(new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 0, 0, 20) });
             side.Children.Add(Label("QUICK CONTROLS", 11, secondary));
-            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nDouble-click text     Edit text\nCircle handle     Rotate images\nShift     Snap rotation to 15°\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
+            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCircle handle     Rotate images\nShift     Snap rotation to 15°\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
             tips.LineHeight = 23; tips.Margin = new Thickness(0, 10, 0, 0); side.Children.Add(tips);
         }
         void BuildStatus()
@@ -528,14 +528,34 @@ namespace ArkBoard
         }
         async void Paste()
         {
-            try { await ImportSources(Importer.Extract(Clipboard.GetDataObject()), Board.CenterWorld); }
+            try
+            {
+                IDataObject data = Clipboard.GetDataObject(); ImageItem item; AssetData asset;
+                if (ArkBoardClipboard.TryRead(data, out item, out asset)) { PasteClipboardImage(item, asset, Board.CenterWorld); return; }
+                await ImportSources(Importer.Extract(data), Board.CenterWorld);
+            }
             catch (Exception ex) { Error("Unable to paste", ex); }
+        }
+        internal ImageItem PasteClipboardImage(ImageItem source, AssetData asset, Point center)
+        {
+            ImageItem pasted = source.Copy(); pasted.Id = Guid.NewGuid().ToString("N"); pasted.Asset = asset.Key;
+            pasted.X = center.X; pasted.Y = center.Y;
+            Document.Change(() =>
+            {
+                Document.Assets[asset.Key] = asset; Document.Items.Add(pasted);
+                Document.Selected.Clear(); Document.Selected.Add(pasted.Id);
+            });
+            SetStatus(pasted.HasMask ? "Masked image pasted" : "Image pasted"); Board.Focus(); return pasted;
         }
         void CopyImage()
         {
             ImageItem i = Document.Selection.LastOrDefault(); if (i == null) return;
             if (i.IsText) { Clipboard.SetText(i.Text); SetStatus("Text copied"); return; }
-            try { Clipboard.SetImage(Document.Assets[i.Asset].Bitmap); SetStatus("Original image copied · Use Ctrl+D to duplicate the selection"); }
+            try
+            {
+                Clipboard.SetDataObject(ArkBoardClipboard.Create(i, Document.Assets[i.Asset]), true);
+                SetStatus("Image copied · Mask and transforms preserved in ArkBoard");
+            }
             catch (Exception ex) { Error("Unable to copy", ex); }
         }
         public async Task ImportSources(List<ImportSource> sources, Point center)
@@ -605,7 +625,7 @@ namespace ArkBoard
                     case Key.Space: Board.SpaceDown = true; Board.Cursor = Cursors.ScrollAll; break;
                     case Key.A: if (shift) handled = false; else if (!e.IsRepeat) ToggleSelectAll(); break;
                     case Key.Delete: DeleteSelection(); break;
-                    case Key.Escape: Board.FinishGesture(); Document.Selected.Clear(); Document.Notify(); break;
+                    case Key.Escape: Board.FinishGesture(); Board.CancelMaskEditing(); Document.Selected.Clear(); Document.Notify(); break;
                     case Key.H: Flip(true); break; case Key.V: Flip(false); break;
                     case Key.R: Rotate(shift ? -15 : 15); break;
                     case Key.F: Board.Fit(shift); break;
@@ -625,7 +645,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.6.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Shift+drag an image edge to mask it; Remove Mask restores the full image. Double-click text to edit it. Text supports movement and proportional scaling only. Drag an image's circle handle to rotate; hold Shift to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.7.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Shift+drag an image edge to mask it; Remove Mask restores the full image. Shift+click a masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Ctrl+C / Ctrl+V preserves masks inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag an image's circle handle to rotate; hold Shift to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

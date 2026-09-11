@@ -73,6 +73,11 @@ namespace ArkBoard
             Point p = m.Transform(world);
             return Math.Abs(p.X) <= Width / 2 && Math.Abs(p.Y) <= Height / 2;
         }
+        public bool ContainsVisible(Point world)
+        {
+            Matrix m = Matrix; m.Invert();
+            return VisibleRect.Contains(m.Transform(world));
+        }
     }
 
     [DataContract]
@@ -280,6 +285,12 @@ namespace ArkBoard
             Path = System.IO.Path.GetFullPath(path); Dirty = false; Notify();
         }
         public static bool Finite(double n) { return !double.IsNaN(n) && !double.IsInfinity(n); }
+        public static bool ValidMask(ImageItem i)
+        {
+            return i != null && Finite(i.MaskLeft) && Finite(i.MaskTop) && Finite(i.MaskRight) && Finite(i.MaskBottom) &&
+                i.MaskLeft >= 0 && i.MaskTop >= 0 && i.MaskRight >= 0 && i.MaskBottom >= 0 &&
+                i.MaskLeft + i.MaskRight < .999 && i.MaskTop + i.MaskBottom < .999;
+        }
         public static byte[] ReadLimited(Stream stream, long limit)
         {
             using (MemoryStream result = new MemoryStream())

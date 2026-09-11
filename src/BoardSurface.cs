@@ -19,6 +19,7 @@ namespace ArkBoard
         internal bool TextToolArmed;
         internal bool TextInputActive;
         internal string EditingTextId;
+        internal string MaskEditingId;
         internal event Action<Point, double> TextPlacementRequested;
         internal event Action<ImageItem> TextEditRequested;
         double placementFontSize = 24;
@@ -54,7 +55,11 @@ namespace ArkBoard
                 settleTimer.Stop(); RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality); InvalidateVisual();
             };
             RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.HighQuality);
-            doc.Changed += delegate { BeginInteractiveRendering(); InvalidateVisual(); };
+            doc.Changed += delegate
+            {
+                if (MaskEditingId != null && !doc.Selected.Contains(MaskEditingId)) MaskEditingId = null;
+                BeginInteractiveRendering(); InvalidateVisual();
+            };
             SizeChanged += delegate { BeginInteractiveRendering(); InvalidateVisual(); };
             Unloaded += delegate { settleTimer.Stop(); };
             LostMouseCapture += delegate { FinishGesture(); };
@@ -72,6 +77,7 @@ namespace ArkBoard
         {
             TextToolArmed = false; TextInputActive = false; FinishGesture(); InvalidateVisual();
         }
+        internal void CancelMaskEditing() { MaskEditingId = null; InvalidateVisual(); }
         public Point ToWorld(Point p) { return new Point((p.X - Document.PanX) / Document.Zoom, (p.Y - Document.PanY) / Document.Zoom); }
         public Point ToScreen(Point p) { return new Point(p.X * Document.Zoom + Document.PanX, p.Y * Document.Zoom + Document.PanY); }
         public Point CenterWorld { get { return ToWorld(new Point(ActualWidth / 2, ActualHeight / 2)); } }
@@ -122,18 +128,20 @@ namespace ArkBoard
             Matrix inverse = item.Matrix; if (!inverse.HasInverse) return -1; inverse.Invert();
             Point local = inverse.Transform(ToWorld(screen));
             double threshold = 11 / Math.Max(.01, Document.Zoom);
-            double marginX = Math.Min(item.Width * .2, 14 / Math.Max(.01, Document.Zoom));
-            double marginY = Math.Min(item.Height * .2, 14 / Math.Max(.01, Document.Zoom));
+            Rect bounds = MaskEditingId == item.Id && item.HasMask ? item.VisibleRect :
+                new Rect(-item.Width / 2, -item.Height / 2, item.Width, item.Height);
+            double marginX = Math.Min(bounds.Width * .2, 14 / Math.Max(.01, Document.Zoom));
+            double marginY = Math.Min(bounds.Height * .2, 14 / Math.Max(.01, Document.Zoom));
             int edge = -1; double distance = double.MaxValue;
-            if (Math.Abs(local.Y) <= item.Height / 2 - marginY)
+            if (local.Y >= bounds.Top + marginY && local.Y <= bounds.Bottom - marginY)
             {
-                double left = Math.Abs(local.X + item.Width / 2), right = Math.Abs(local.X - item.Width / 2);
+                double left = Math.Abs(local.X - bounds.Left), right = Math.Abs(local.X - bounds.Right);
                 if (left <= threshold && left < distance) { edge = 0; distance = left; }
                 if (right <= threshold && right < distance) { edge = 2; distance = right; }
             }
-            if (Math.Abs(local.X) <= item.Width / 2 - marginX)
+            if (local.X >= bounds.Left + marginX && local.X <= bounds.Right - marginX)
             {
-                double top = Math.Abs(local.Y + item.Height / 2), bottom = Math.Abs(local.Y - item.Height / 2);
+                double top = Math.Abs(local.Y - bounds.Top), bottom = Math.Abs(local.Y - bounds.Bottom);
                 if (top <= threshold && top < distance) { edge = 1; distance = top; }
                 if (bottom <= threshold && bottom < distance) { edge = 3; }
             }
@@ -147,6 +155,23 @@ namespace ArkBoard
             else if (edge == 2) item.MaskRight = Limit((basis.Width / 2 - local.X) / basis.Width, 0, 1 - basis.MaskLeft - minimumVisible);
             else if (edge == 1) item.MaskTop = Limit((local.Y + basis.Height / 2) / basis.Height, 0, 1 - basis.MaskBottom - minimumVisible);
             else if (edge == 3) item.MaskBottom = Limit((basis.Height / 2 - local.Y) / basis.Height, 0, 1 - basis.MaskTop - minimumVisible);
+        }
+        internal static void ApplyMaskOffset(ImageItem item, ImageItem basis, Point start, Point current)
+        {
+            Matrix inverse = basis.Matrix; if (!inverse.HasInverse) return; inverse.Invert();
+            Vector delta = inverse.Transform(current) - inverse.Transform(start);
+            double horizontal = basis.MaskLeft + basis.MaskRight;
+            double vertical = basis.MaskTop + basis.MaskBottom;
+            item.MaskLeft = Limit(basis.MaskLeft + delta.X / basis.Width, 0, horizontal);
+            item.MaskRight = horizontal - item.MaskLeft;
+            item.MaskTop = Limit(basis.MaskTop + delta.Y / basis.Height, 0, vertical);
+            item.MaskBottom = vertical - item.MaskTop;
+        }
+        Point[] VisibleCorners(ImageItem item)
+        {
+            Rect r = item.VisibleRect; Matrix m = item.Matrix;
+            return new[] { new Point(r.Left, r.Top), new Point(r.Right, r.Top), new Point(r.Right, r.Bottom), new Point(r.Left, r.Bottom) }
+                .Select(p => ToScreen(m.Transform(p))).ToArray();
         }
         static double Limit(double value, double minimum, double maximum) { return Math.Max(minimum, Math.Min(maximum, value)); }
         internal bool AutoSortSelection(ImageItem dragged)
@@ -196,16 +221,21 @@ namespace ArkBoard
                 if (item.Id == EditingTextId) continue;
                 Point[] corners = item.Corners().Select(ToScreen).ToArray();
                 Pen pen = new Pen(accent, 1.5);
-                for (int i = 0; i < 4; i++) dc.DrawLine(pen, corners[i], corners[(i + 1) % 4]);
+                bool maskEditing = item.Id == MaskEditingId && item.HasMask;
+                Pen outerPen = maskEditing ? new Pen(accent, 1.5) { DashStyle = DashStyles.Dash } : pen;
+                for (int i = 0; i < 4; i++) dc.DrawLine(outerPen, corners[i], corners[(i + 1) % 4]);
                 if (Document.Selected.Count == 1)
                 {
-                    foreach (Point p in corners) dc.DrawRectangle(background, pen, new Rect(p.X - 4, p.Y - 4, 8, 8));
+                    foreach (Point p in corners) dc.DrawRectangle(background, outerPen, new Rect(p.X - 4, p.Y - 4, 8, 8));
                     if (!item.IsText)
                     {
+                        Point[] maskCorners = maskEditing ? VisibleCorners(item) : corners;
+                        if (maskEditing) for (int side = 0; side < 4; side++)
+                            dc.DrawLine(pen, maskCorners[side], maskCorners[(side + 1) % 4]);
                         for (int side = 0; side < 4; side++)
                         {
-                            Point midpoint = new Point((corners[side].X + corners[(side + 1) % 4].X) / 2,
-                                (corners[side].Y + corners[(side + 1) % 4].Y) / 2);
+                            Point midpoint = new Point((maskCorners[side].X + maskCorners[(side + 1) % 4].X) / 2,
+                                (maskCorners[side].Y + maskCorners[(side + 1) % 4].Y) / 2);
                             dc.DrawRectangle(background, pen, new Rect(midpoint.X - 3, midpoint.Y - 3, 6, 6));
                         }
                         Point top = new Point((corners[0].X + corners[1].X) / 2, (corners[0].Y + corners[1].Y) / 2);
@@ -268,6 +298,8 @@ namespace ArkBoard
             }
             if (e.ChangedButton != MouseButton.Left) return;
             if (e.ClickCount == 2 && TryEditTextAt(startScreen)) { e.Handled = true; return; }
+            bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (!shiftDown) MaskEditingId = null;
             ImageItem single = Document.Selected.Count == 1 ? Document.Selection.FirstOrDefault() : null;
             if (single != null)
             {
@@ -284,11 +316,20 @@ namespace ArkBoard
                         gesture = "resize"; transformStart = single.Copy();
                         anchor = corners[(i + 2) % 4]; diagonal = corners[i] - anchor; break;
                     }
-                    if (gesture == null && !single.IsText && (Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+                    if (gesture == null && !single.IsText && shiftDown)
                     {
                         maskEdge = MaskEdgeAt(single, startScreen);
-                        if (maskEdge >= 0) { gesture = "mask"; transformStart = single.Copy(); }
+                        if (maskEdge >= 0) { gesture = "mask"; transformStart = single.Copy(); MaskEditingId = single.Id; }
                     }
+                }
+            }
+            if (gesture == null && shiftDown)
+            {
+                ImageItem maskedHit = Hit(startScreen);
+                if (maskedHit != null && maskedHit.HasMask && maskedHit.ContainsVisible(startWorld))
+                {
+                    Document.Selected.Clear(); Document.Selected.Add(maskedHit.Id); MaskEditingId = maskedHit.Id;
+                    transformStart = maskedHit.Copy(); gesture = "maskmove"; Document.Notify();
                 }
             }
             if (gesture == null)
@@ -379,6 +420,7 @@ namespace ArkBoard
                         item.Width = transformStart.Width * factor; item.Height = transformStart.Height * factor;
                     }
                     else if (gesture == "mask") ApplyMask(item, transformStart, maskEdge, world);
+                    else if (gesture == "maskmove") ApplyMaskOffset(item, transformStart, startWorld, world);
                     else if (gesture == "rotate")
                     {
                         double a = Math.Atan2(world.Y - item.Y, world.X - item.X) * 180 / Math.PI;

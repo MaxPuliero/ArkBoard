@@ -112,6 +112,22 @@ namespace ArkBoard
             var maskRead = new BoardDocument(); maskRead.Load(maskProject);
             Check(Near(maskRead.Items.Single().MaskLeft, .3) && maskRead.Items.Single().HasMask,
                 "Project round trip preserves non-destructive image masks");
+            maskRead.Items.Single().Rotation = 27; maskRead.Items.Single().FlipX = true;
+            maskRead.Items.Single().Width *= .8; maskRead.Items.Single().Height *= .8;
+            ImageItem clipboardItem; AssetData clipboardAsset;
+            DataObject clipboardData = ArkBoardClipboard.Create(maskRead.Items.Single(), maskRead.Assets[blue.Key]);
+            Check(ArkBoardClipboard.TryRead(clipboardData, out clipboardItem, out clipboardAsset) && clipboardItem.HasMask &&
+                Near(clipboardItem.MaskLeft, .3) && Near(clipboardItem.Rotation, 27) && clipboardItem.FlipX &&
+                Near(clipboardItem.Width, maskRead.Items.Single().Width) && clipboardAsset.Bytes.SequenceEqual(blue.Bytes),
+                "ArkBoard clipboard data preserves mask, transforms and exact embedded asset bytes");
+            ImageItem movingMask = maskRead.Items.Single().Copy(), movingBasis = maskRead.Items.Single().Copy();
+            movingBasis.MaskTop = movingMask.MaskTop = .2; movingBasis.MaskBottom = movingMask.MaskBottom = .1;
+            Point maskMoveStart = movingBasis.Matrix.Transform(new Point(0, 0));
+            Point maskMoveEnd = movingBasis.Matrix.Transform(new Point(-movingBasis.Width * .1, movingBasis.Height * .05));
+            BoardSurface.ApplyMaskOffset(movingMask, movingBasis, maskMoveStart, maskMoveEnd);
+            Check(Near(movingMask.MaskLeft, .2) && Near(movingMask.MaskRight, .1) && Near(movingMask.MaskTop, .25) &&
+                Near(movingMask.MaskBottom, .05) && movingMask.Bounds() == movingBasis.Bounds(),
+                "Moving a mask preserves its size and the image bounding box while clamping it inside the image");
             masked.MaskRight = .8; string invalidMaskProject = Path.Combine(folder, "invalid-mask.arkboard");
             maskDoc.Save(invalidMaskProject); bool invalidMaskFailed = false;
             try { maskRead.Load(invalidMaskProject); } catch (InvalidDataException) { invalidMaskFailed = true; }
@@ -190,6 +206,12 @@ namespace ArkBoard
             Check(wi[0].HasMask && wi[0].Bounds() == selectionBounds && wi[0].VisibleRect.Width < wi[0].Width,
                 "A selected masked image keeps its full selection geometry");
             Capture(window, Path.Combine(folder, "ui-masked.png"));
+            window.Board.MaskEditingId = wi[0].Id; window.Board.InvalidateVisual();
+            Point[] maskCorners = new[] { wi[0].Matrix.Transform(wi[0].VisibleRect.TopLeft), wi[0].Matrix.Transform(wi[0].VisibleRect.TopRight) };
+            Point maskTopMiddle = window.Board.ToScreen(new Point((maskCorners[0].X + maskCorners[1].X) / 2, (maskCorners[0].Y + maskCorners[1].Y) / 2));
+            Check(window.Board.MaskEdgeAt(wi[0], maskTopMiddle) == 1,
+                "Mask adjustment mode targets the visible mask edge instead of the original outer edge");
+            Capture(window, Path.Combine(folder, "ui-mask-adjustment.png"));
             window.RemoveMask();
             Check(!wi[0].HasMask, "Remove Mask restores selected masked images");
             window.Document.Undo();
@@ -326,6 +348,11 @@ namespace ArkBoard
             window.Width = 1280; window.Height = 820; window.Document.Selected.Clear(); window.Document.Notify();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             window.Board.Fit(false); Capture(window, Path.Combine(folder, "ui-text.png"));
+            int beforeClipboardPaste = window.Document.Items.Count;
+            ImageItem pastedMask = window.PasteClipboardImage(clipboardItem, clipboardAsset, new Point(50, 75));
+            Check(window.Document.Items.Count == beforeClipboardPaste + 1 && pastedMask.HasMask && Near(pastedMask.MaskLeft, .3) &&
+                Near(pastedMask.X, 50) && Near(pastedMask.Y, 75),
+                "Pasting ArkBoard clipboard data creates a new image while preserving its mask");
             window.Close();
             File.WriteAllLines(Path.Combine(folder, "results.txt"), checks.Concat(new[] { "", checks.Count + " checks passed." }));
         }
