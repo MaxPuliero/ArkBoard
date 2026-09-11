@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -15,6 +16,8 @@ namespace ArkBoard
         public bool ShowGrid = true;
         public bool AutoSorting = true;
         public bool SpaceDown;
+        internal bool ShiftPreview;
+        internal string HoveredImageId;
         public event Action ViewChanged;
         internal bool TextToolArmed;
         internal bool TextInputActive;
@@ -29,6 +32,7 @@ namespace ArkBoard
         readonly Brush imageBackground = new SolidColorBrush(Color.FromRgb(37, 37, 37));
         readonly DrawingBrush gridTile;
         readonly DispatcherTimer settleTimer;
+        static readonly Cursor rotateCursor = LoadRotateCursor();
         string gesture;
         Point startScreen, startWorld, lastScreen;
         Dictionary<string, ImageItem> originals;
@@ -68,6 +72,12 @@ namespace ArkBoard
         {
             RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.LowQuality);
             settleTimer.Stop(); settleTimer.Start();
+        }
+        static Cursor LoadRotateCursor()
+        {
+            Stream stream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor");
+            if (stream == null) return Cursors.Hand;
+            using (stream) return new Cursor(stream);
         }
         internal void ArmTextTool()
         {
@@ -114,13 +124,44 @@ namespace ArkBoard
             if (TextEditRequested != null) TextEditRequested(item);
             return true;
         }
-        Point RotationHandle(ImageItem item)
+        internal Point[] RotationHandles(ImageItem item)
         {
             Point[] corners = item.Corners().Select(ToScreen).ToArray();
-            Point top = new Point((corners[0].X + corners[1].X) / 2, (corners[0].Y + corners[1].Y) / 2);
-            Vector normal = top - ToScreen(new Point(item.X, item.Y));
-            if (normal.Length < .001) normal = new Vector(0, -1);
-            normal.Normalize(); return top + normal * 30;
+            var handles = new Point[4];
+            for (int index = 0; index < 4; index++)
+            {
+                Vector next = corners[(index + 1) % 4] - corners[index];
+                Vector previous = corners[(index + 3) % 4] - corners[index];
+                if (next.Length > .001) next.Normalize(); if (previous.Length > .001) previous.Normalize();
+                handles[index] = corners[index] + next * 27 + previous * 27;
+            }
+            return handles;
+        }
+        internal int RotationHandleAt(ImageItem item, Point screen)
+        {
+            if (item == null || item.IsText) return -1;
+            Point[] handles = RotationHandles(item);
+            for (int index = 0; index < handles.Length; index++) if ((handles[index] - screen).Length <= 14) return index;
+            return -1;
+        }
+        void DrawRotationAnchor(DrawingContext dc, Point center, Pen pen)
+        {
+            const double radius = 8;
+            Point start = new Point(center.X + radius, center.Y);
+            Point end = new Point(center.X, center.Y - radius);
+            var figure = new PathFigure { StartPoint = start, IsClosed = false };
+            figure.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, true, SweepDirection.Clockwise, true));
+            var geometry = new PathGeometry(new[] { figure });
+            dc.DrawGeometry(null, pen, geometry);
+            dc.DrawLine(pen, end, new Point(end.X - 4, end.Y + 1));
+            dc.DrawLine(pen, end, new Point(end.X + 1, end.Y + 4));
+        }
+        internal void SetShiftPreview(bool active)
+        {
+            ShiftPreview = active;
+            ImageItem hovered = active && IsMouseOver ? Hit(Mouse.GetPosition(this)) : null;
+            HoveredImageId = hovered != null && !hovered.IsText ? hovered.Id : null;
+            InvalidateVisual();
         }
         internal int MaskEdgeAt(ImageItem item, Point screen)
         {
@@ -128,7 +169,8 @@ namespace ArkBoard
             Matrix inverse = item.Matrix; if (!inverse.HasInverse) return -1; inverse.Invert();
             Point local = inverse.Transform(ToWorld(screen));
             double threshold = 11 / Math.Max(.01, Document.Zoom);
-            Rect bounds = MaskEditingId == item.Id && item.HasMask ? item.VisibleRect :
+            bool useVisibleBounds = item.HasMask && (MaskEditingId == item.Id || (ShiftPreview && HoveredImageId == item.Id));
+            Rect bounds = useVisibleBounds ? item.VisibleRect :
                 new Rect(-item.Width / 2, -item.Height / 2, item.Width, item.Height);
             double marginX = Math.Min(bounds.Width * .2, 14 / Math.Max(.01, Document.Zoom));
             double marginY = Math.Min(bounds.Height * .2, 14 / Math.Max(.01, Document.Zoom));
@@ -216,31 +258,39 @@ namespace ArkBoard
                 dc.Pop();
             }
             dc.Pop();
-            foreach (ImageItem item in Document.Selection)
+            List<ImageItem> controlItems = Document.Selection.ToList();
+            if (ShiftPreview && HoveredImageId != null && !Document.Selected.Contains(HoveredImageId))
+            {
+                ImageItem hovered = Document.Items.FirstOrDefault(i => i.Id == HoveredImageId && !i.IsText);
+                if (hovered != null) controlItems.Add(hovered);
+            }
+            foreach (ImageItem item in controlItems)
             {
                 if (item.Id == EditingTextId) continue;
                 Point[] corners = item.Corners().Select(ToScreen).ToArray();
                 Pen pen = new Pen(accent, 1.5);
-                bool maskEditing = item.Id == MaskEditingId && item.HasMask;
+                bool selected = Document.Selected.Contains(item.Id);
+                bool maskControls = !item.IsText && (item.Id == MaskEditingId || (ShiftPreview && item.Id == HoveredImageId));
+                bool maskEditing = maskControls && item.HasMask;
                 Pen outerPen = maskEditing ? new Pen(accent, 1.5) { DashStyle = DashStyles.Dash } : pen;
                 for (int i = 0; i < 4; i++) dc.DrawLine(outerPen, corners[i], corners[(i + 1) % 4]);
-                if (Document.Selected.Count == 1)
+                if ((selected && Document.Selected.Count == 1) || maskControls)
                 {
-                    foreach (Point p in corners) dc.DrawRectangle(background, outerPen, new Rect(p.X - 4, p.Y - 4, 8, 8));
+                    if (selected && Document.Selected.Count == 1)
+                        foreach (Point p in corners) dc.DrawRectangle(background, outerPen, new Rect(p.X - 4, p.Y - 4, 8, 8));
                     if (!item.IsText)
                     {
                         Point[] maskCorners = maskEditing ? VisibleCorners(item) : corners;
                         if (maskEditing) for (int side = 0; side < 4; side++)
                             dc.DrawLine(pen, maskCorners[side], maskCorners[(side + 1) % 4]);
-                        for (int side = 0; side < 4; side++)
+                        if (maskControls) for (int side = 0; side < 4; side++)
                         {
                             Point midpoint = new Point((maskCorners[side].X + maskCorners[(side + 1) % 4].X) / 2,
                                 (maskCorners[side].Y + maskCorners[(side + 1) % 4].Y) / 2);
                             dc.DrawRectangle(background, pen, new Rect(midpoint.X - 3, midpoint.Y - 3, 6, 6));
                         }
-                        Point top = new Point((corners[0].X + corners[1].X) / 2, (corners[0].Y + corners[1].Y) / 2);
-                        Point handle = RotationHandle(item);
-                        dc.DrawLine(pen, top, handle); dc.DrawEllipse(background, pen, handle, 5, 5);
+                        if (selected && Document.Selected.Count == 1 && !maskControls)
+                            foreach (Point handle in RotationHandles(item)) DrawRotationAnchor(dc, handle, pen);
                     }
                 }
             }
@@ -303,7 +353,7 @@ namespace ArkBoard
             ImageItem single = Document.Selected.Count == 1 ? Document.Selection.FirstOrDefault() : null;
             if (single != null)
             {
-                if (!single.IsText && (RotationHandle(single) - startScreen).Length < 11)
+                if (!shiftDown && !single.IsText && RotationHandleAt(single, startScreen) >= 0)
                 {
                     gesture = "rotate"; transformStart = single.Copy();
                     startAngle = Math.Atan2(startWorld.Y - single.Y, startWorld.X - single.X) * 180 / Math.PI;
@@ -316,20 +366,24 @@ namespace ArkBoard
                         gesture = "resize"; transformStart = single.Copy();
                         anchor = corners[(i + 2) % 4]; diagonal = corners[i] - anchor; break;
                     }
-                    if (gesture == null && !single.IsText && shiftDown)
-                    {
-                        maskEdge = MaskEdgeAt(single, startScreen);
-                        if (maskEdge >= 0) { gesture = "mask"; transformStart = single.Copy(); MaskEditingId = single.Id; }
-                    }
                 }
             }
             if (gesture == null && shiftDown)
             {
                 ImageItem maskedHit = Hit(startScreen);
-                if (maskedHit != null && maskedHit.HasMask && maskedHit.ContainsVisible(startWorld))
+                if (maskedHit != null && !maskedHit.IsText)
                 {
-                    Document.Selected.Clear(); Document.Selected.Add(maskedHit.Id); MaskEditingId = maskedHit.Id;
-                    transformStart = maskedHit.Copy(); gesture = "maskmove"; Document.Notify();
+                    maskEdge = MaskEdgeAt(maskedHit, startScreen);
+                    if (maskEdge >= 0)
+                    {
+                        Document.Selected.Clear(); Document.Selected.Add(maskedHit.Id); MaskEditingId = maskedHit.Id;
+                        transformStart = maskedHit.Copy(); gesture = "mask"; Document.Notify();
+                    }
+                    else if (maskedHit.HasMask && maskedHit.ContainsVisible(startWorld))
+                    {
+                        Document.Selected.Clear(); Document.Selected.Add(maskedHit.Id); MaskEditingId = maskedHit.Id;
+                        transformStart = maskedHit.Copy(); gesture = "maskmove"; Document.Notify();
+                    }
                 }
             }
             if (gesture == null)
@@ -359,15 +413,21 @@ namespace ArkBoard
             Point screen = e.GetPosition(this);
             if (gesture == null)
             {
+                bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+                ImageItem hovered = Hit(screen);
+                string hoveredId = hovered != null && !hovered.IsText ? hovered.Id : null;
+                bool previewChanged = ShiftPreview != shiftDown || HoveredImageId != hoveredId;
+                ShiftPreview = shiftDown; HoveredImageId = hoveredId;
+                if (previewChanged) InvalidateVisual();
                 if (TextToolArmed) { Cursor = Cursors.Cross; return; }
-                Cursor = SpaceDown ? Cursors.ScrollAll : Hit(screen) != null ? Cursors.SizeAll : Cursors.Arrow;
+                Cursor = SpaceDown ? Cursors.ScrollAll : hovered != null ? Cursors.SizeAll : Cursors.Arrow;
                 if (Document.Selected.Count == 1)
                 {
                     ImageItem i = Document.Selection.FirstOrDefault();
                     if (i != null && i.Corners().Any(p => (ToScreen(p) - screen).Length < 11)) Cursor = Cursors.SizeNWSE;
-                    else if (i != null && !i.IsText && (Keyboard.Modifiers & ModifierKeys.Shift) != 0 && MaskEdgeAt(i, screen) >= 0)
+                    else if (i != null && !i.IsText && shiftDown && MaskEdgeAt(i, screen) >= 0)
                     { int edge = MaskEdgeAt(i, screen); Cursor = edge == 0 || edge == 2 ? Cursors.SizeWE : Cursors.SizeNS; }
-                    else if (i != null && !i.IsText && (RotationHandle(i) - screen).Length < 11) Cursor = Cursors.Hand;
+                    else if (i != null && !i.IsText && !shiftDown && RotationHandleAt(i, screen) >= 0) Cursor = rotateCursor;
                 }
                 return;
             }
@@ -432,6 +492,11 @@ namespace ArkBoard
                 Document.Notify();
             }
             lastScreen = screen; InvalidateVisual(); e.Handled = true;
+        }
+        protected override void OnMouseLeave(MouseEventArgs e)
+        {
+            base.OnMouseLeave(e);
+            if (HoveredImageId != null) { HoveredImageId = null; InvalidateVisual(); }
         }
         public static double NormalizeAngle(double angle) { return ((angle % 360) + 360) % 360; }
         protected override void OnMouseUp(MouseButtonEventArgs e)

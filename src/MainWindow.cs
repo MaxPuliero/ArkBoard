@@ -66,8 +66,12 @@ namespace ArkBoard
             Board.PreviewDragOver += OnDragOver;
             Board.Drop += OnDrop;
             PreviewKeyDown += OnKey;
-            PreviewKeyUp += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Space) { Board.SpaceDown = false; Board.Cursor = Cursors.Arrow; } };
-            Deactivated += delegate { Board.SpaceDown = false; Board.FinishGesture(); };
+            PreviewKeyUp += delegate(object s, KeyEventArgs e)
+            {
+                if (e.Key == Key.Space) { Board.SpaceDown = false; Board.Cursor = Cursors.Arrow; }
+                if (e.Key == Key.LeftShift || e.Key == Key.RightShift) Board.SetShiftPreview(false);
+            };
+            Deactivated += delegate { Board.SpaceDown = false; Board.SetShiftPreview(false); Board.FinishGesture(); };
             Closing += delegate(object s, System.ComponentModel.CancelEventArgs e) { if (!testMode && (busy || !ConfirmDiscard())) e.Cancel = true; };
             SourceInitialized += delegate
             {
@@ -292,7 +296,7 @@ namespace ArkBoard
             side.Children.Add(new Border { Height = 30 });
             side.Children.Add(new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 0, 0, 20) });
             side.Children.Add(Label("QUICK CONTROLS", 11, secondary));
-            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCircle handle     Rotate images\nShift     Snap rotation to 15°\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
+            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCorner rotation anchors     Rotate images\nShift     Show mask controls / snap rotation\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
             tips.LineHeight = 23; tips.Margin = new Thickness(0, 10, 0, 0); side.Children.Add(tips);
         }
         void BuildStatus()
@@ -604,6 +608,7 @@ namespace ArkBoard
             bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0) return;
             if (Board.IsMouseCaptured && e.Key != Key.Space && e.Key != Key.Escape) return;
+            if (e.Key == Key.LeftShift || e.Key == Key.RightShift) Board.SetShiftPreview(true);
             bool handled = true;
             if (ctrl)
             {
@@ -645,7 +650,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.7.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Shift+drag an image edge to mask it; Remove Mask restores the full image. Shift+click a masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Ctrl+C / Ctrl+V preserves masks inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag an image's circle handle to rotate; hold Shift to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.7.1\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. If dragging is blocked, try Copy Image and Ctrl+V.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image. Ctrl+C / Ctrl+V preserves masks inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO and first GIF frame. WebP depends on installed Windows codecs.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

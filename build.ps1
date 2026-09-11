@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'dist-arkboard-1.7.0')
+param([string]$OutputDirectory = 'dist-arkboard-1.7.1')
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $frameworkRoot = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
@@ -6,10 +6,12 @@ $compiler = Join-Path $frameworkRoot 'csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw '.NET Framework 4.x compiler was not found.' }
 $output = Join-Path $projectRoot $OutputDirectory
 New-Item -ItemType Directory -Force -Path $output | Out-Null
+& (Join-Path $projectRoot 'tools\build-rotate-cursor.ps1') | Out-Null
 $references = @('System.dll', 'System.Core.dll', 'System.Xaml.dll', 'System.Runtime.Serialization.dll', 'System.Net.Http.dll')
 $arguments = @('/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/utf8output', "/out:$output\ArkBoard.exe", "/win32manifest:$projectRoot\app.manifest")
 $arguments += "/win32icon:$projectRoot\assets\ArkBoard.ico"
 $arguments += "/resource:$projectRoot\assets\ArkBoard.ico,ArkBoard.AppIcon"
+$arguments += "/resource:$projectRoot\assets\rotate.cur,ArkBoard.RotateCursor"
 foreach ($reference in $references) { $arguments += "/reference:$reference" }
 foreach ($name in @('PresentationCore.dll', 'PresentationFramework.dll', 'WindowsBase.dll')) { $arguments += "/reference:$frameworkRoot\WPF\$name" }
 $compression = Get-ChildItem -LiteralPath "$env:WINDIR\Microsoft.NET\assembly\GAC_MSIL\System.IO.Compression" -Recurse -Filter 'System.IO.Compression.dll' | Select-Object -First 1

@@ -1,10 +1,16 @@
-# ArkBoard 1.7.0
+# ArkBoard 1.7.1
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Selection controls in 1.7.1
+
+- A normal image selection shows only the four corner scale handles. The inactive midpoint squares and the old top-center rotation stalk have been removed.
+- Four inset circular-arrow anchors rotate an image. Their hit areas are larger than their visible marks, and hovering one uses a dedicated rotation cursor.
+- Holding **Shift** while the pointer is over an image immediately previews the four midpoint mask handles. Existing masks also show their visible solid outline and original dashed bounds before a click.
 
 ## Start
 
@@ -25,7 +31,7 @@ Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it
 ## Text editing in 1.5.0
 
 - Double-click a text object to edit its contents in place. Esc or a click outside confirms the edit; an empty edit deletes the object. Text edits operate on the existing object and support undo/redo.
-- Text objects support movement and proportional scaling. Rotation and horizontal/vertical flipping apply only to images; their controls and rotation handle are hidden for a text-only selection.
+- Text objects support movement and proportional scaling. Rotation and horizontal/vertical flipping apply only to images; their controls and rotation anchors are hidden for a text-only selection.
 
 ## New in 1.4.2
 
@@ -65,9 +71,9 @@ Confirmed text becomes a movable canvas object and supports resizing, duplicatio
 
 Drag files from File Explorer or images from a browser onto the canvas, use **Ctrl+I**, or paste with **Ctrl+V**. Web images are downloaded and embedded. If a site blocks dragging or downloading, try **Copy Image** in the browser and paste. Links to whole web pages are not crawled. Authenticated images and `blob:` URLs may require copying instead.
 
-Drag an image to move it. Drag a corner to resize proportionally with the opposite corner anchored. Drag the circle handle to rotate; hold Shift for 15-degree steps. Enter rotation or scale in the side panel and press Enter. **Reset Rotation** sets the selected images to 0 degrees without changing size, position or flips. Flip X/Y uses each image's local horizontal/vertical axes.
+Drag an image to move it. Drag a corner to resize proportionally with the opposite corner anchored. Drag any inset circular-arrow anchor near a corner to rotate; hold Shift while rotating for 15-degree steps. Enter rotation or scale in the side panel and press Enter. **Reset Rotation** sets the selected images to 0 degrees without changing size, position or flips. Flip X/Y uses each image's local horizontal/vertical axes.
 
-To mask an image, select it, hold **Shift**, then drag one of the small handles centered on its four edges. Masking clips what ArkBoard displays without cropping or changing the embedded source. **Shift+click** a masked image to show its solid visible outline inside the dashed original bounds. In this mode, Shift+drag the visible region to reposition the mask or Shift+drag its edge handles to refine it. **Remove Mask** appears in the side panel whenever at least one selected image has a mask.
+To mask an image, hover it and hold **Shift** to reveal the small handles centered on its four edges, then drag one. Masking clips what ArkBoard displays without cropping or changing the embedded source. An existing mask previews its solid visible outline inside the dashed original bounds as soon as Shift is held. Shift+drag the visible region to reposition the mask or Shift+drag its edge handles to refine it. **Remove Mask** appears in the side panel whenever at least one selected image has a mask.
 
 Ctrl+click adds/removes images from the selection. Drag empty canvas space for a selection rectangle. The side panel appears only when an image is selected. Its controls apply to all selected images; transform handles are shown for a single selection.
 
@@ -124,11 +130,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.7.0
-Start-Process .\dist-arkboard-1.7.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.7.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.7.1
+Start-Process .\dist-arkboard-1.7.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.7.1' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.7.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, masking and mask movement, ArkBoard clipboard data, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.7.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

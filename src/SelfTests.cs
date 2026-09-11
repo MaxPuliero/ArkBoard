@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace ArkBoard
@@ -140,6 +141,17 @@ namespace ArkBoard
             var sortBoard = new BoardSurface(sortDoc);
             Check(sortBoard.AutoSorting && sortBoard.AutoSortSelection(sortFirst) && sortDoc.Items.Last() == sortFirst,
                 "Auto-sorting is enabled by default and brings a dragged image selection to the top");
+            Point[] rotationHandles = sortBoard.RotationHandles(sortFirst);
+            Point[] rotationCorners = sortFirst.Corners().Select(sortBoard.ToScreen).ToArray();
+            Check(rotationHandles.Length == 4 && Enumerable.Range(0, 4).All(k =>
+                    Math.Abs((rotationHandles[k] - rotationCorners[k]).Length - Math.Sqrt(27 * 27 * 2)) < .001) &&
+                    sortBoard.RotationHandleAt(sortFirst, rotationHandles[2]) == 2,
+                "Four inset rotation anchors stay clear of the corner scale handles and have generous hit targets");
+            using (Stream cursorStream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor"))
+            {
+                Check(cursorStream != null, "The rotation cursor is embedded in the portable executable");
+                using (var cursor = new Cursor(cursorStream)) Check(cursor != null, "The embedded rotation cursor is a valid Windows cursor");
+            }
             sortBoard.AutoSorting = false; sortDoc.Selected.Clear(); sortDoc.Selected.Add(sortSecond.Id);
             Check(!sortBoard.AutoSortSelection(sortSecond) && sortDoc.Items.Last() == sortFirst,
                 "Disabling auto-sorting preserves the existing stacking order");
@@ -206,6 +218,13 @@ namespace ArkBoard
             Check(wi[0].HasMask && wi[0].Bounds() == selectionBounds && wi[0].VisibleRect.Width < wi[0].Width,
                 "A selected masked image keeps its full selection geometry");
             Capture(window, Path.Combine(folder, "ui-masked.png"));
+            window.Board.MaskEditingId = null; window.Board.ShiftPreview = true; window.Board.HoveredImageId = wi[0].Id; window.Board.InvalidateVisual();
+            Point[] previewMaskCorners = new[] { wi[0].Matrix.Transform(wi[0].VisibleRect.TopLeft), wi[0].Matrix.Transform(wi[0].VisibleRect.TopRight) };
+            Point previewMaskTopMiddle = window.Board.ToScreen(new Point((previewMaskCorners[0].X + previewMaskCorners[1].X) / 2, (previewMaskCorners[0].Y + previewMaskCorners[1].Y) / 2));
+            Check(window.Board.MaskEdgeAt(wi[0], previewMaskTopMiddle) == 1,
+                "Holding Shift over an image previews actionable controls on the visible mask edges before clicking");
+            Capture(window, Path.Combine(folder, "ui-mask-shift-preview.png"));
+            window.Board.ShiftPreview = false; window.Board.HoveredImageId = null;
             window.Board.MaskEditingId = wi[0].Id; window.Board.InvalidateVisual();
             Point[] maskCorners = new[] { wi[0].Matrix.Transform(wi[0].VisibleRect.TopLeft), wi[0].Matrix.Transform(wi[0].VisibleRect.TopRight) };
             Point maskTopMiddle = window.Board.ToScreen(new Point((maskCorners[0].X + maskCorners[1].X) / 2, (maskCorners[0].Y + maskCorners[1].Y) / 2));
