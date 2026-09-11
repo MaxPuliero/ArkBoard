@@ -33,6 +33,8 @@ namespace ArkBoard
         StackPanel rotationSection, flipSection;
         internal Expander layersExpander;
         internal StackPanel layersList;
+        internal Expander quickControlsExpander;
+        Border layersSeparator;
         string layersUiKey;
         MenuItem undoMenuItem, redoMenuItem;
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
@@ -237,6 +239,14 @@ namespace ArkBoard
         }
         TextBlock Label(string value, double size, Brush color)
         { return new TextBlock { Text = value, FontSize = size, Foreground = color, TextWrapping = TextWrapping.Wrap }; }
+        Grid QuickControl(string shortcut, string action)
+        {
+            var row = new Grid { Width = 294, Margin = new Thickness(0, 2, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(116) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            TextBlock key = Label(shortcut, 11, secondary); TextBlock description = Label(action, 11, secondary);
+            Grid.SetColumn(description, 1); row.Children.Add(key); row.Children.Add(description); return row;
+        }
         void BuildWorkspace()
         {
             Grid area = new Grid(); Grid.SetRow(area, 1); Root.Children.Add(area);
@@ -255,59 +265,81 @@ namespace ArkBoard
             textToolButton.Background = Brush("#323232"); textToolButton.Foreground = Brush("#B0B0B0");
             System.Windows.Automation.AutomationProperties.SetName(textToolButton, "Text tool");
             Panel.SetZIndex(textToolButton, 20); area.Children.Add(textToolButton);
-            inspector = new Border { Background = panel, BorderBrush = Brush("#393939"), BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(18) };
+            quickControlsExpander = new Expander { Header = "QUICK CONTROLS", IsExpanded = true, Foreground = secondary,
+                Background = Brush("#191919"), Padding = new Thickness(8), Width = 310,
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 0, 6) };
+            var quickPanel = new StackPanel { Margin = new Thickness(0, 7, 0, 0) };
+            quickPanel.Children.Add(QuickControl("Wheel", "Zoom at cursor"));
+            quickPanel.Children.Add(QuickControl("Space + drag", "Pan canvas"));
+            quickPanel.Children.Add(QuickControl("Middle drag", "Pan canvas"));
+            quickPanel.Children.Add(QuickControl("Ctrl + click", "Multi-select"));
+            quickPanel.Children.Add(QuickControl("Drag empty space", "Select"));
+            quickPanel.Children.Add(QuickControl("Corners", "Proportional resize"));
+            quickPanel.Children.Add(QuickControl("Shift + image edge", "Mask"));
+            quickPanel.Children.Add(QuickControl("Shift + click masked", "Adjust mask"));
+            quickPanel.Children.Add(QuickControl("Shift + drag masked", "Move mask"));
+            quickPanel.Children.Add(QuickControl("Double-click text", "Edit text"));
+            quickPanel.Children.Add(QuickControl("Rotation anchors", "Rotate images"));
+            quickPanel.Children.Add(QuickControl("Shift", "Mask controls / angle snap"));
+            quickPanel.Children.Add(QuickControl("Alt+S / R / M", "Reset scale / rotation / mask"));
+            quickPanel.Children.Add(QuickControl("Ctrl+A / Ctrl+P", "Normalize / pack"));
+            quickPanel.Children.Add(QuickControl("A", "Select / deselect all"));
+            quickPanel.Children.Add(QuickControl("F", "Fit all"));
+            quickControlsExpander.Content = quickPanel;
+            System.Windows.Automation.AutomationProperties.SetName(quickControlsExpander, "Quick controls");
+            Panel.SetZIndex(quickControlsExpander, 20); area.Children.Add(quickControlsExpander);
+            inspector = new Border { Background = panel, BorderBrush = Brush("#393939"), BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(28, 28, 28, 18) };
             Grid.SetColumn(inspector, 1); area.Children.Add(inspector);
             ScrollViewer scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
             inspector.Child = scroll;
             StackPanel side = new StackPanel(); scroll.Content = side;
             selectionTitle = Label("SELECTION", 11, secondary); selectionTitle.FontWeight = FontWeights.SemiBold; side.Children.Add(selectionTitle);
             emptyInspector = Label("Select an image to edit it.", 14, text); emptyInspector.Margin = new Thickness(0, 18, 0, 12); side.Children.Add(emptyInspector);
-            properties = new StackPanel { Margin = new Thickness(0, 18, 0, 0) }; side.Children.Add(properties);
+            properties = new StackPanel { Margin = new Thickness(0, 26, 0, 0) }; side.Children.Add(properties);
             imageName = Label("", 16, text); imageName.FontWeight = FontWeights.SemiBold; properties.Children.Add(imageName);
-            imageInfo = Label("", 12, secondary); imageInfo.Margin = new Thickness(0, 7, 0, 22); properties.Children.Add(imageInfo);
+            imageInfo = Label("", 12, secondary); imageInfo.Margin = new Thickness(0, 7, 0, 28); properties.Children.Add(imageInfo);
             rotationSection = new StackPanel(); properties.Children.Add(rotationSection);
             rotationSection.Children.Add(Label("Rotation · degrees", 12, secondary));
-            rotationBox = new TextBox { Margin = new Thickness(0, 7, 0, 9), ToolTip = "Enter an angle and press Enter" };
+            Grid rotationRow = new Grid { Margin = new Thickness(0, 8, 0, 23) };
+            rotationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            rotationRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(82) });
+            rotationBox = new TextBox { Margin = new Thickness(0, 0, 6, 0), ToolTip = "Enter an angle and press Enter" };
             rotationBox.KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { ApplyRotation(); e.Handled = true; } };
-            rotationSection.Children.Add(rotationBox);
-            StackPanel rotations = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 19) };
-            rotations.Children.Add(Button("−90°", () => Rotate(-90), "Rotate left"));
-            rotations.Children.Add(Button("+90°", () => Rotate(90), "Rotate right")); rotationSection.Children.Add(rotations);
-            Button resetRotation = Button("Reset Rotation", ResetRotation, "Reset all selected images to 0° · Alt+R");
-            resetRotation.Margin = new Thickness(0, -11, 6, 18); rotationSection.Children.Add(resetRotation);
+            Button resetRotation = Button("Reset", ResetRotation, "Reset all selected images to 0° · Alt+R"); resetRotation.Margin = new Thickness(0);
+            Grid.SetColumn(resetRotation, 1); rotationRow.Children.Add(rotationBox); rotationRow.Children.Add(resetRotation); rotationSection.Children.Add(rotationRow);
             properties.Children.Add(Label("Scale · % of original", 12, secondary));
-            scaleBox = new TextBox { Margin = new Thickness(0, 7, 0, 9), ToolTip = "Proportional scale: enter a percentage and press Enter" };
+            Grid scaleRow = new Grid { Margin = new Thickness(0, 8, 0, 23) };
+            scaleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            scaleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(82) });
+            scaleBox = new TextBox { Margin = new Thickness(0, 0, 6, 0), ToolTip = "Proportional scale: enter a percentage and press Enter" };
             scaleBox.KeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Enter) { ApplyScale(); e.Handled = true; } };
-            properties.Children.Add(scaleBox);
-            properties.Children.Add(Button("Original Size", ResetSize, "Restore original width and height · Alt+S"));
-            removeMaskButton = Button("Remove Mask", RemoveMask, "Restore the full area of the selected masked images · Alt+M");
-            removeMaskButton.Margin = new Thickness(0, 7, 6, 0); properties.Children.Add(removeMaskButton);
-            layersExpander = new Expander { Header = "PSD LAYERS", Foreground = text, Margin = new Thickness(0, 17, 0, 4), IsExpanded = true };
-            layersList = new StackPanel { Margin = new Thickness(3, 9, 0, 3) }; layersExpander.Content = layersList;
-            properties.Children.Add(layersExpander);
-            properties.Children.Add(new Border { Height = 7 });
-            properties.Children.Add(Button("Normalize Size", NormalizeSelected, "Match the average longest side of the selected images · Ctrl+A"));
-            properties.Children.Add(new Border { Height = 7 });
-            properties.Children.Add(Button("Pack Images", PackImages, "Arrange selected images compactly without overlaps · Ctrl+P"));
-            properties.Children.Add(new Border { Height = 21 });
+            Button resetScale = Button("Reset", ResetSize, "Restore original width and height · Alt+S"); resetScale.Margin = new Thickness(0);
+            Grid.SetColumn(resetScale, 1); scaleRow.Children.Add(scaleBox); scaleRow.Children.Add(resetScale); properties.Children.Add(scaleRow);
             flipSection = new StackPanel(); properties.Children.Add(flipSection);
             flipSection.Children.Add(Label("Flip", 12, secondary));
-            StackPanel flips = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 20) };
+            StackPanel flips = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 28) };
             flipXButton = Button("↔  X", () => Flip(true), "Flip horizontally · H");
             flipYButton = Button("↕  Y", () => Flip(false), "Flip vertically · V");
             flips.Children.Add(flipXButton); flips.Children.Add(flipYButton); flipSection.Children.Add(flips);
-            properties.Children.Add(Button("Bring to Front", () => Reorder(true), "Bring selected images to front · ]"));
-            properties.Children.Add(new Border { Height = 7 });
-            properties.Children.Add(Button("Send to Back", () => Reorder(false), "Send selected images to back · ["));
-            properties.Children.Add(new Border { Height = 18 });
-            StackPanel operations = new StackPanel { Orientation = Orientation.Horizontal };
-            operations.Children.Add(Button("Duplicate", Duplicate, "Duplicate · Ctrl+D"));
-            operations.Children.Add(Button("Delete", DeleteSelection, "Delete · Del")); properties.Children.Add(operations);
-            side.Children.Add(new Border { Height = 30 });
-            side.Children.Add(new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 0, 0, 20) });
-            side.Children.Add(Label("QUICK CONTROLS", 11, secondary));
-            TextBlock tips = Label("Wheel     Zoom at cursor\nSpace + drag     Pan canvas\nMiddle drag     Pan canvas\nCtrl + click     Multi-select\nDrag empty space     Select\nCorners     Proportional resize\nShift + image edge     Mask\nShift + click masked     Adjust mask\nShift + drag masked     Move mask\nDouble-click text     Edit text\nCorner rotation anchors     Rotate images\nShift     Show mask controls / snap rotation\nAlt+S / R / M     Reset scale / rotation / mask\nCtrl+A     Normalize size\nCtrl+P     Pack images\nA     Select / deselect all\nF     Fit all", 12, secondary);
-            tips.LineHeight = 23; tips.Margin = new Thickness(0, 10, 0, 0); side.Children.Add(tips);
+            removeMaskButton = Button("Remove Mask", RemoveMask, "Restore the full area of the selected masked images · Alt+M");
+            removeMaskButton.Margin = new Thickness(0, 0, 0, 16); properties.Children.Add(removeMaskButton);
+            properties.Children.Add(Button("Normalize Size", NormalizeSelected, "Match the average longest side of the selected images · Ctrl+A"));
+            properties.Children.Add(new Border { Height = 10 });
+            properties.Children.Add(Button("Pack Images", PackImages, "Arrange selected images compactly without overlaps · Ctrl+P"));
+            Grid stacking = new Grid { Margin = new Thickness(0, 28, 0, 28) };
+            stacking.ColumnDefinitions.Add(new ColumnDefinition()); stacking.ColumnDefinitions.Add(new ColumnDefinition());
+            Button front = Button("Bring to Front", () => Reorder(true), "Bring selected images to front · ]");
+            Button back = Button("Send to Back", () => Reorder(false), "Send selected images to back · ["); back.Margin = new Thickness(3, 0, 0, 0);
+            Grid.SetColumn(back, 1); stacking.Children.Add(front); stacking.Children.Add(back); properties.Children.Add(stacking);
+            Grid operations = new Grid(); operations.ColumnDefinitions.Add(new ColumnDefinition()); operations.ColumnDefinitions.Add(new ColumnDefinition());
+            Button duplicate = Button("Duplicate", Duplicate, "Duplicate · Ctrl+D");
+            Button delete = Button("Delete", DeleteSelection, "Delete · Del"); delete.Margin = new Thickness(3, 0, 0, 0);
+            Grid.SetColumn(delete, 1); operations.Children.Add(duplicate); operations.Children.Add(delete); properties.Children.Add(operations);
+            layersSeparator = new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 30, 0, 20) };
+            properties.Children.Add(layersSeparator);
+            layersExpander = new Expander { Header = "LAYERS", Foreground = text, Margin = new Thickness(0, 0, 0, 4), IsExpanded = true };
+            layersList = new StackPanel { Margin = new Thickness(7, 9, 0, 3) }; layersExpander.Content = layersList;
+            properties.Children.Add(layersExpander);
         }
         void BuildStatus()
         {
@@ -383,10 +415,10 @@ namespace ArkBoard
             foreach (MenuItem item in new[] { flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem })
                 item.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             Visibility panelVisibility = any ? Visibility.Visible : Visibility.Collapsed;
-            if (inspector.Visibility != panelVisibility || inspectorColumn.Width.Value != (any ? 240 : 0))
+            if (inspector.Visibility != panelVisibility || inspectorColumn.Width.Value != (any ? 360 : 0))
             {
                 inspector.Visibility = panelVisibility;
-                inspectorColumn.Width = new GridLength(any ? 240 : 0);
+                inspectorColumn.Width = new GridLength(any ? 360 : 0);
                 // Finish layout before Fit or a drag reads canvas coordinates.
                 Root.UpdateLayout();
             }
@@ -414,6 +446,7 @@ namespace ArkBoard
             AssetData asset = item == null ? null : Document.Assets[item.Asset];
             bool visible = asset != null && asset.IsPsd;
             layersExpander.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            layersSeparator.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             if (!visible) { layersUiKey = null; layersList.Children.Clear(); return; }
             string key = item.Id + "|" + string.Concat(item.LayerVisibility.Select(v => v ? '1' : '0'));
             if (layersUiKey == key) return;
@@ -702,7 +735,7 @@ namespace ArkBoard
         }
         void Help()
         {
-            MessageBox.Show(this, "ArkBoard 1.8.0\n\nPortable reference canvas for Windows.\n\nDrop images from File Explorer or a browser. Basic 8-bit RGB PSD files expose their raster layers in the selection panel; each layer can be toggled on or off. The original PSD remains embedded.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image.\n\nAlt+S resets scale to 100%. Alt+R resets rotation. Alt+M removes the mask. Ctrl+C / Ctrl+V preserves masks, transforms and PSD layer visibility inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO, PSD and first GIF frame. WebP depends on installed Windows codecs.\n\nPSD support covers standard PSD, RGB 8-bit raster layers and raw/RLE pixels. Blend modes, effects, Photoshop masks, adjustment layers, smart objects, 16/32-bit documents, ZIP-compressed layers and PSB are not interpreted.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "ArkBoard 1.8.1\n\nPortable reference canvas for Windows.\n\nThe compact selection sidebar groups rotation, scale, flip and object actions, with PSD layers at the bottom. Quick Controls is a collapsible panel at the bottom-left of the canvas and starts open.\n\nDrop images from File Explorer or a browser. Basic 8-bit RGB PSD files expose their raster layers in the selection panel; each layer can be toggled on or off. The original PSD remains embedded.\n\nDrag corners to resize proportionally. Hover an image and hold Shift to reveal its mask handles, then drag an edge to mask it. A masked image shows its solid mask outline and dashed original bounds; Shift+drag the visible area to move the mask. Remove Mask restores the full image.\n\nAlt+S resets scale to 100%. Alt+R resets rotation. Alt+M removes the mask. Ctrl+C / Ctrl+V preserves masks, transforms and PSD layer visibility inside ArkBoard.\n\nDouble-click text to edit it. Text supports movement and proportional scaling only. Drag one of an image's four inset rotation anchors to rotate; hold Shift while rotating to snap to 15°.\n\nSettings → Auto-Sorting brings an image to the top when its drag begins and is enabled by default.\n\nCtrl+A: normalize selected images to their average longest side.\nCtrl+P: pack selected images, or all images if none are selected.\nA: select all; press A again to deselect.\nCtrl+Z / Ctrl+Y: undo / redo.\nCtrl+Shift+0: restore full opacity.\n\nCtrl+S saves images and layout in one .arkboard file.\n\nPNG, JPEG, BMP, TIFF, ICO, PSD and first GIF frame. WebP depends on installed Windows codecs.\n\nPSD support covers standard PSD, RGB 8-bit raster layers and raw/RLE pixels. Blend modes, effects, Photoshop masks, adjustment layers, smart objects, 16/32-bit documents, ZIP-compressed layers and PSB are not interpreted.\n\nPureRef .pur files are not supported. See README.md for details.", "ArkBoard · Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

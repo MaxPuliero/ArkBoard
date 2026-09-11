@@ -285,10 +285,17 @@ namespace ArkBoard
             await Task.Delay(300);
             Check(RenderOptions.GetBitmapScalingMode(window.Board) == BitmapScalingMode.HighQuality, "Full-quality bitmap sampling returns after interaction settles");
             double fullCanvasWidth = window.Board.ActualWidth;
+            Check(window.quickControlsExpander.IsExpanded && window.quickControlsExpander.VerticalAlignment == VerticalAlignment.Bottom &&
+                window.quickControlsExpander.HorizontalAlignment == HorizontalAlignment.Left,
+                "Quick Controls starts expanded at the bottom-left of the canvas");
+            window.quickControlsExpander.IsExpanded = false;
+            Check(!window.quickControlsExpander.IsExpanded, "Quick Controls can be collapsed to its header");
+            Capture(window, Path.Combine(folder, "ui-quick-controls-collapsed.png"));
+            window.quickControlsExpander.IsExpanded = true;
             Capture(window, Path.Combine(folder, "ui-empty.png"));
             await window.ImportSources(new List<ImportSource> { new ImportSource { Bytes = blue.Bytes, Name = "Shapes.png" }, new ImportSource { Bytes = pink.Bytes, Name = "Color.png" }, new ImportSource { Bytes = green.Bytes, Name = "Atmosphere.png" } }, new Point(0, 0));
             Check(window.Document.Items.Count == 3, "UI import pipeline adds and selects multiple images");
-            Check(Near(fullCanvasWidth - window.Board.ActualWidth, 240), "Selecting images reveals the inspector and reserves its width");
+            Check(Near(fullCanvasWidth - window.Board.ActualWidth, 360), "Selecting images reveals the wider readable inspector and reserves its width");
             var wi = window.Document.Items;
             wi[0].X = 270; wi[0].Y = 200; wi[0].Rotation = -8;
             wi[1].X = 760; wi[1].Y = 300; wi[1].FlipX = true;
