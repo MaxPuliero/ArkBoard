@@ -9,6 +9,7 @@ namespace ArkBoard
 {
     internal static class DarkDialog
     {
+        internal const string DownloadUrl = "https://maxpuliero.gumroad.com/l/ArkBoard";
         static Brush B(string value) { return (Brush)new BrushConverter().ConvertFromString(value); }
 
         static Window Create(Window owner, string title, string message, out StackPanel buttons)
@@ -59,6 +60,10 @@ namespace ArkBoard
         internal static void ShowAbout(Window owner, string message)
         {
             StackPanel buttons; Window window = Create(owner, Localization.T("About ArkBoard"), message, out buttons);
+            Button gumroad = FlatButton("Gumroad");
+            gumroad.ToolTip = "Download ArkBoard";
+            gumroad.Click += delegate { Process.Start(new ProcessStartInfo(DownloadUrl) { UseShellExecute = true }); };
+            buttons.Children.Add(gumroad);
             Button github = FlatButton("GitHub");
             github.Click += delegate { Process.Start(new ProcessStartInfo("https://github.com/MaxPuliero/ArkBoard") { UseShellExecute = true }); };
             buttons.Children.Add(github);
