@@ -46,12 +46,12 @@ namespace ArkBoard
         internal static extern bool GetLayeredWindowAttributes(IntPtr window, out uint color, out byte alpha, out uint flags);
 
         internal static bool IsLayered(IntPtr window) { return (GetWindowLongPtr(window, ExtendedStyle).ToInt64() & Layered) != 0; }
-        internal void Apply(double percent)
+        internal void Apply(double percent, bool forceLayered = false)
         {
             if (window == IntPtr.Zero) return;
             if (!BoardDocument.Finite(percent)) throw new ArgumentOutOfRangeException("percent");
             long style = GetWindowLongPtr(window, ExtendedStyle).ToInt64();
-            layered = percent < 100;
+            layered = percent < 100 || forceLayered;
             if (!layered)
             {
                 // Restore WPF's normal opaque presentation path, including after a resize.

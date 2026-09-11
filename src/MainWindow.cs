@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Markup;
@@ -26,6 +27,8 @@ namespace ArkBoard
         ColumnDefinition inspectorColumn;
         internal Slider opacitySlider;
         WindowTransparency transparency;
+        WindowInputLock inputLock;
+        internal LockControlsWindow lockControlsWindow;
         TextBlock opacityValue;
         internal StackPanel opacityControls;
         internal Button topmostButton, lockButton;
@@ -80,50 +83,64 @@ namespace ArkBoard
                 if (e.Key == Key.LeftShift || e.Key == Key.RightShift) Board.SetShiftPreview(false);
             };
             Deactivated += delegate { Board.SpaceDown = false; Board.SetShiftPreview(false); Board.FinishGesture(); };
+            LocationChanged += delegate { PositionLockControls(); };
+            SizeChanged += delegate { PositionLockControls(); };
+            StateChanged += delegate { PositionLockControls(); };
+            Closed += delegate { LockControlsWindow old = lockControlsWindow; lockControlsWindow = null; if (old != null && old.IsVisible) old.Close(); };
             Closing += delegate(object s, System.ComponentModel.CancelEventArgs e) { if (!testMode && (busy || !ConfirmDiscard())) e.Cancel = true; };
             SourceInitialized += delegate
             {
                 try { int dark = 1; DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, 4); } catch { }
                 HwndSource source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
                 transparency = new WindowTransparency(source);
-                source.AddHook(LockHitTest);
+                inputLock = new WindowInputLock(source.Handle);
                 ApplyWindowOpacity();
             };
             Refresh();
         }
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-        const int WmNcHitTest = 0x0084;
-        static readonly IntPtr HitTransparent = new IntPtr(-1);
-        IntPtr LockHitTest(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (!locked || message != WmNcHitTest) return IntPtr.Zero;
-            long packed = lParam.ToInt64();
-            Point screen = new Point(unchecked((short)(packed & 0xffff)), unchecked((short)((packed >> 16) & 0xffff)));
-            DependencyObject hit = InputHitTest(PointFromScreen(screen)) as DependencyObject;
-            if (IsLockInteractive(hit)) return IntPtr.Zero;
-            handled = true; return HitTransparent;
-        }
-        internal bool IsLockInteractive(DependencyObject hit)
-        { return IsWithin(hit, opacityControls) && !IsWithin(hit, topmostButton); }
-        static bool IsWithin(DependencyObject child, DependencyObject ancestor)
-        {
-            if (child == null || ancestor == null) return false;
-            for (DependencyObject current = child; current != null; current = VisualTreeHelper.GetParent(current))
-                if (current == ancestor) return true;
-            return false;
-        }
         internal void SetLocked(bool value)
         {
+            if (locked == value) return;
             locked = value;
             lockButton.Content = new TextBlock { Text = value ? "\uE72E" : "\uE785", FontFamily = new FontFamily("Segoe MDL2 Assets") };
             lockButton.Background = value ? Brush("#555555") : Brush("#323232");
+            if (value)
+            {
+                lockControlsWindow = new LockControlsWindow(this);
+                lockControlsWindow.OpacityRequested += SetWindowOpacity;
+                lockControlsWindow.TopmostRequested += delegate { SetTopmost(!Topmost); };
+                lockControlsWindow.UnlockRequested += delegate { SetLocked(false); };
+                lockControlsWindow.Sync(opacitySlider.Value, Topmost);
+                lockControlsWindow.Show(); PositionLockControls();
+                opacityControls.Opacity = 0;
+                if (transparency != null) transparency.Apply(opacitySlider.Value, true);
+                if (inputLock != null) inputLock.Apply(true);
+            }
+            else
+            {
+                if (inputLock != null) inputLock.Apply(false);
+                opacityControls.Opacity = 1;
+                LockControlsWindow old = lockControlsWindow; lockControlsWindow = null;
+                if (old != null) old.Close();
+                if (transparency != null) transparency.Apply(opacitySlider.Value);
+            }
             SetStatus(value ? "Board locked · Clicks pass through to the application below" : "Board unlocked");
         }
         internal bool Locked { get { return locked; } }
+        void PositionLockControls()
+        {
+            if (lockControlsWindow == null || !lockControlsWindow.IsVisible || opacityControls.ActualWidth <= 0) return;
+            Point pixels = opacityControls.PointToScreen(new Point(Math.Max(0, opacityControls.ActualWidth - lockControlsWindow.Width), 0));
+            HwndSource source = PresentationSource.FromVisual(this) as HwndSource;
+            if (source != null && source.CompositionTarget != null) pixels = source.CompositionTarget.TransformFromDevice.Transform(pixels);
+            lockControlsWindow.Left = pixels.X; lockControlsWindow.Top = pixels.Y;
+        }
         void SetTopmost(bool value)
         {
             Topmost = value; topmostItem.IsChecked = value;
             if (topmostButton != null) topmostButton.Background = value ? Brush("#555555") : Brush("#323232");
+            if (lockControlsWindow != null) lockControlsWindow.Sync(opacitySlider.Value, value);
         }
         static Brush Brush(string color) { return (Brush)new BrushConverter().ConvertFromString(color); }
         void ApplyStyles()
@@ -215,6 +232,16 @@ namespace ArkBoard
     <ContentPresenter x:Name='content' ContentSource='Content' Margin='{TemplateBinding Padding}'/>
    </StackPanel>
    <ControlTemplate.Triggers><Trigger Property='IsExpanded' Value='False'><Setter TargetName='content' Property='Visibility' Value='Collapsed'/></Trigger></ControlTemplate.Triggers>
+  </ControlTemplate></Setter.Value></Setter>
+ </Style>
+ <Style x:Key='ThinScrollBar' TargetType='ScrollBar' BasedOn='{StaticResource {x:Type ScrollBar}}'><Setter Property='Width' Value='6'/></Style>
+ <Style x:Key='QuickScrollViewer' TargetType='ScrollViewer'>
+  <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='ScrollViewer'>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='*'/><ColumnDefinition Width='6'/></Grid.ColumnDefinitions>
+    <ScrollContentPresenter x:Name='PART_ScrollContentPresenter' CanContentScroll='{TemplateBinding CanContentScroll}'/>
+    <ScrollBar x:Name='PART_VerticalScrollBar' Grid.Column='1' Width='6' Minimum='0' Maximum='{TemplateBinding ScrollableHeight}'
+     ViewportSize='{TemplateBinding ViewportHeight}' Value='{TemplateBinding VerticalOffset}' Visibility='{TemplateBinding ComputedVerticalScrollBarVisibility}'/>
+   </Grid>
   </ControlTemplate></Setter.Value></Setter>
  </Style>
  <Style TargetType='Slider'>
@@ -399,8 +426,11 @@ namespace ArkBoard
             quickPanel.Children.Add(QuickControl("Ctrl+Shift+0", "Opacity 100%"));
             quickPanel.Children.Add(QuickControl("Esc", "Clear selection / confirm text"));
             quickPanel.Children.Add(QuickControl("F1", "About ArkBoard"));
-            quickControlsExpander.Content = new ScrollViewer { Content = quickPanel, MaxHeight = 455,
+            var quickScroll = new ScrollViewer { Content = quickPanel, MaxHeight = 455,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            quickScroll.Style = (Style)Resources["QuickScrollViewer"];
+            quickScroll.Resources[typeof(ScrollBar)] = (Style)Resources["ThinScrollBar"];
+            quickControlsExpander.Content = quickScroll;
             System.Windows.Automation.AutomationProperties.SetName(quickControlsExpander, "Quick controls");
             Panel.SetZIndex(quickControlsExpander, 20); area.Children.Add(quickControlsExpander);
             inspector = new Border { Background = panel, BorderBrush = Brush("#393939"), BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(28, 28, 28, 18) };
@@ -493,7 +523,12 @@ namespace ArkBoard
         void ApplyWindowOpacity()
         {
             opacityValue.Text = opacitySlider.Value.ToString("0") + "%";
-            try { if (transparency != null) transparency.Apply(opacitySlider.Value); }
+            try
+            {
+                if (transparency != null) transparency.Apply(opacitySlider.Value, locked);
+                if (locked && inputLock != null) inputLock.Apply(true);
+                if (lockControlsWindow != null) lockControlsWindow.Sync(opacitySlider.Value, Topmost);
+            }
             catch (Exception ex) { if (testMode) throw; SetStatus("Opacity unavailable: " + ex.Message); }
         }
         void BuildContextMenu()
@@ -860,11 +895,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.10.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.10.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.10.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

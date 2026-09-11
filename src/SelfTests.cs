@@ -123,6 +123,13 @@ namespace ArkBoard
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
             using (Stream s = File.Create(path)) png.Save(s);
         }
+        static void CaptureControlWindow(Window window, string path)
+        {
+            window.UpdateLayout();
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(window); var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+            using (Stream s = File.Create(path)) png.Save(s);
+        }
         public static async Task Run(string folder)
         {
             Directory.CreateDirectory(folder);
@@ -299,11 +306,19 @@ namespace ArkBoard
             Check(window.topmostButton != null && window.lockButton != null && window.opacityControls.Children.Contains(window.lockButton),
                 "Eye and lock controls sit beside the opacity controls");
             window.SetLocked(true);
-            Check(window.Locked && window.IsLockInteractive(window.opacitySlider) && window.IsLockInteractive(window.lockButton) &&
-                !window.IsLockInteractive(window.topmostButton) && !window.IsLockInteractive(window.Board),
-                "Locked mode passes canvas and eye input through while opacity and unlock remain interactive");
+            IntPtr lockHandle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            Check(window.Locked && WindowInputLock.IsClickThrough(lockHandle) && window.lockControlsWindow != null && window.lockControlsWindow.IsVisible,
+                "Locked mode applies cross-process click-through to the main ArkBoard window and shows independent controls");
+            Check(window.lockControlsWindow.EyeButton.IsEnabled && window.lockControlsWindow.LockButton.IsEnabled && window.lockControlsWindow.OpacitySlider.IsEnabled,
+                "Eye, lock and opacity remain reachable in the independent locked controls window");
+            window.SetWindowOpacity(5);
+            Check(Near(window.lockControlsWindow.Opacity, .5) && Near(window.lockControlsWindow.OpacitySlider.Value, 5),
+                "Locked controls clamp to 50 percent opacity while the board can reach 5 percent");
+            CaptureControlWindow(window.lockControlsWindow, Path.Combine(folder, "ui-lock-controls.png"));
             Capture(window, Path.Combine(folder, "ui-locked.png"));
-            window.SetLocked(false); Check(!window.Locked, "Board lock can be released from its persistent control");
+            window.SetWindowOpacity(100); window.SetLocked(false);
+            Check(!window.Locked && !WindowInputLock.IsClickThrough(lockHandle) && window.lockControlsWindow == null,
+                "Board lock can be released from its persistent control and restores normal input");
             Check(BoardSurface.DragZoomTarget(1, 180, false) > 2.7 && BoardSurface.DragZoomTarget(1, 180, true) < .38,
                 "Alt plus middle-button vertical drag zooms down by default and supports inversion");
             window.SetLanguage(UiLanguage.Italian);
