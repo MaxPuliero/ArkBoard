@@ -99,6 +99,34 @@ namespace ArkBoard
             legacyRead.Save(Path.Combine(folder, "migrated.arkboard"));
             using (var file = File.OpenRead(legacyRead.Path)) using (var zip = new ZipArchive(file, ZipArchiveMode.Read)) using (var entry = zip.GetEntry("manifest.json").Open())
                 Check(((Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(entry)).Format == "ArkBoard", "New projects identify themselves as ArkBoard");
+            var maskDoc = new BoardDocument();
+            ImageItem masked = maskDoc.Add(blue, "Masked.png", new Point(300, 200));
+            ImageItem maskBasis = masked.Copy(); Rect fullBounds = masked.Bounds();
+            BoardSurface.ApplyMask(masked, maskBasis, 0, maskBasis.Matrix.Transform(new Point(-maskBasis.Width * .2, 0)));
+            Check(Near(masked.MaskLeft, .3) && Near(masked.VisibleRect.Width, masked.Width * .7) && masked.Bounds() == fullBounds,
+                "Masking changes the visible image area while preserving the original bounding box");
+            string maskProject = Path.Combine(folder, "masked.arkboard"); maskDoc.Save(maskProject);
+            using (var file = File.OpenRead(maskProject)) using (var zip = new ZipArchive(file, ZipArchiveMode.Read)) using (var entry = zip.GetEntry("manifest.json").Open())
+                Check(((Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(entry)).Version == 3,
+                    "Masked projects use manifest version 3");
+            var maskRead = new BoardDocument(); maskRead.Load(maskProject);
+            Check(Near(maskRead.Items.Single().MaskLeft, .3) && maskRead.Items.Single().HasMask,
+                "Project round trip preserves non-destructive image masks");
+            masked.MaskRight = .8; string invalidMaskProject = Path.Combine(folder, "invalid-mask.arkboard");
+            maskDoc.Save(invalidMaskProject); bool invalidMaskFailed = false;
+            try { maskRead.Load(invalidMaskProject); } catch (InvalidDataException) { invalidMaskFailed = true; }
+            Check(invalidMaskFailed && Near(maskRead.Items.Single().MaskLeft, .3),
+                "Invalid mask geometry is rejected without replacing the open board");
+            var sortDoc = new BoardDocument();
+            ImageItem sortFirst = sortDoc.Add(blue, "First.png", new Point());
+            ImageItem sortSecond = sortDoc.Add(pink, "Second.png", new Point());
+            sortDoc.Selected.Add(sortFirst.Id);
+            var sortBoard = new BoardSurface(sortDoc);
+            Check(sortBoard.AutoSorting && sortBoard.AutoSortSelection(sortFirst) && sortDoc.Items.Last() == sortFirst,
+                "Auto-sorting is enabled by default and brings a dragged image selection to the top");
+            sortBoard.AutoSorting = false; sortDoc.Selected.Clear(); sortDoc.Selected.Add(sortSecond.Id);
+            Check(!sortBoard.AutoSortSelection(sortSecond) && sortDoc.Items.Last() == sortFirst,
+                "Disabling auto-sorting preserves the existing stacking order");
             string broken = Path.Combine(folder, "broken.refcanvas"); File.WriteAllText(broken, "invalid zip");
             bool failed = false; try { read.Load(broken); } catch { failed = true; }
             Check(failed && read.Items.Count == 1 && read.Assets.Count == 1, "Invalid archive leaves the existing board intact");
@@ -156,6 +184,18 @@ namespace ArkBoard
             Check(Near(before.X, after.X) && Near(before.Y, after.Y), "Zoom remains anchored under the cursor");
             window.Board.Fit(false);
             Check(window.Board.Hit(window.Board.ToScreen(new Point(wi[1].X, wi[1].Y))) == wi[1], "Canvas hits transformed image at its visible center");
+            Rect selectionBounds = wi[0].Bounds(); ImageItem uiMaskBasis = wi[0].Copy();
+            BoardSurface.ApplyMask(wi[0], uiMaskBasis, 2, uiMaskBasis.Matrix.Transform(new Point(uiMaskBasis.Width * .1, 0)));
+            window.Document.Notify();
+            Check(wi[0].HasMask && wi[0].Bounds() == selectionBounds && wi[0].VisibleRect.Width < wi[0].Width,
+                "A selected masked image keeps its full selection geometry");
+            Capture(window, Path.Combine(folder, "ui-masked.png"));
+            window.RemoveMask();
+            Check(!wi[0].HasMask, "Remove Mask restores selected masked images");
+            window.Document.Undo();
+            Check(window.Document.Items.Single(i => i.Id == wi[0].Id).HasMask, "Removing a mask can be undone");
+            window.Document.Redo(); wi = window.Document.Items;
+            Check(!wi.Single(i => i.Id == uiMaskBasis.Id).HasMask, "Removing a mask can be redone");
             window.Document.Save(Path.Combine(folder, "Example.arkboard"));
             window.SetStatus("Sample project · All images are embedded");
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);

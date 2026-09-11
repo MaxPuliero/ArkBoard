@@ -27,7 +27,20 @@ namespace ArkBoard
         [DataMember] public bool FlipY;
         [DataMember(EmitDefaultValue = false)] public string Text;
         [DataMember(EmitDefaultValue = false)] public double FontSize;
+        [DataMember(EmitDefaultValue = false)] public double MaskLeft;
+        [DataMember(EmitDefaultValue = false)] public double MaskTop;
+        [DataMember(EmitDefaultValue = false)] public double MaskRight;
+        [DataMember(EmitDefaultValue = false)] public double MaskBottom;
         public bool IsText { get { return Text != null; } }
+        public bool HasMask { get { return !IsText && (MaskLeft > 0 || MaskTop > 0 || MaskRight > 0 || MaskBottom > 0); } }
+        public Rect VisibleRect
+        {
+            get
+            {
+                return new Rect(-Width / 2 + Width * MaskLeft, -Height / 2 + Height * MaskTop,
+                    Width * (1 - MaskLeft - MaskRight), Height * (1 - MaskTop - MaskBottom));
+            }
+        }
         public ImageItem Copy() { return (ImageItem)MemberwiseClone(); }
         public Matrix Matrix
         {
@@ -194,7 +207,8 @@ namespace ArkBoard
                 using (FileStream file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Create))
                 {
-                    var manifest = new Manifest { Version = Items.Any(i => i.IsText) ? 2 : 1, Images = Clone(Items), Zoom = Zoom, PanX = PanX, PanY = PanY };
+                    var manifest = new Manifest { Version = Items.Any(i => i.HasMask) ? 3 : Items.Any(i => i.IsText) ? 2 : 1,
+                        Images = Clone(Items), Zoom = Zoom, PanX = PanX, PanY = PanY };
                     using (Stream entry = zip.CreateEntry("manifest.json", CompressionLevel.Optimal).Open())
                         new DataContractJsonSerializer(typeof(Manifest)).WriteObject(entry, manifest);
                     foreach (string key in Items.Where(i => !i.IsText).Select(i => i.Asset).Distinct())
@@ -220,7 +234,7 @@ namespace ArkBoard
                 ZipArchiveEntry me = zip.GetEntry("manifest.json");
                 if (me == null || me.Length > 8 * 1024 * 1024) throw new InvalidDataException("Project manifest is missing or too large.");
                 using (Stream stream = me.Open()) manifest = (Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(stream);
-                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || (manifest.Version != 1 && manifest.Version != 2) || manifest.Images == null)
+                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || manifest.Version < 1 || manifest.Version > 3 || manifest.Images == null)
                     throw new InvalidDataException("Unsupported project format or version.");
                 if (manifest.Images.Count > 10000) throw new InvalidDataException("Project contains too many images.");
                 var ids = new HashSet<string>();
@@ -231,13 +245,20 @@ namespace ArkBoard
                         !Finite(i.Width) || !Finite(i.Height) || !Finite(i.Rotation) || i.Width < 0.01 || i.Height < 0.01 ||
                         i.Width > 1000000 || i.Height > 1000000 || Math.Abs(i.X) > 100000000 || Math.Abs(i.Y) > 100000000)
                         throw new InvalidDataException("Invalid image data.");
+                    if (!Finite(i.MaskLeft) || !Finite(i.MaskTop) || !Finite(i.MaskRight) || !Finite(i.MaskBottom))
+                        throw new InvalidDataException("Invalid image mask.");
                     if (i.IsText)
                     {
                         if (manifest.Version < 2 || i.Text.Length > 10000 || string.IsNullOrWhiteSpace(i.Text) ||
-                            !Finite(i.FontSize) || i.FontSize < 1 || i.FontSize > 8192)
+                            !Finite(i.FontSize) || i.FontSize < 1 || i.FontSize > 8192 ||
+                            i.MaskLeft != 0 || i.MaskTop != 0 || i.MaskRight != 0 || i.MaskBottom != 0)
                             throw new InvalidDataException("Invalid text object.");
                         continue;
                     }
+                    if (i.MaskLeft < 0 || i.MaskTop < 0 || i.MaskRight < 0 || i.MaskBottom < 0 ||
+                        i.MaskLeft + i.MaskRight >= .999 || i.MaskTop + i.MaskBottom >= .999 ||
+                        (i.HasMask && manifest.Version < 3))
+                        throw new InvalidDataException("Invalid image mask.");
                     if (string.IsNullOrEmpty(i.Asset) || i.Asset.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
                         throw new InvalidDataException("Invalid image asset.");
                     if (assets.ContainsKey(i.Asset)) continue;

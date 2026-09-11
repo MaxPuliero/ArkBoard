@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'dist-arkboard-1.5.0')
+param([string]$OutputDirectory = 'dist-arkboard-1.6.0')
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $frameworkRoot = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
@@ -22,5 +22,6 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'ArkBoard.exe.config') -Destinati
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Register-ArkBoard.ps1') -Destination $output
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs') -Destination $output -Recurse -Force
 Write-Output "Built: $output\ArkBoard.exe"
 
