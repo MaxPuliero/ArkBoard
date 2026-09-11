@@ -1,10 +1,16 @@
-# ArkBoard 1.9.1
+# ArkBoard 1.10.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Overlay lock in 1.10.0
+
+- The eye button beside Opacity toggles **Always on Top**. The lock button makes the rest of ArkBoard click-through, allowing direct work in an application such as ZBrush beneath a translucent reference board.
+- While locked, the opacity controls and lock button remain interactive. The eye intentionally stays locked with the rest of the window until the board is unlocked.
+- Quick Controls now includes every implemented editing, project and navigation shortcut. Double-clicking empty canvas space continues to fit all board content.
 
 ## PSD compositing fix in 1.9.1
 
@@ -164,11 +170,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.9.1
-Start-Process .\dist-arkboard-1.9.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.9.1' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.10.0
+Start-Process .\dist-arkboard-1.10.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.10.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.9.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, localized UI, drag-zoom direction, compact sidebar layout, Quick Controls expansion, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.10.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

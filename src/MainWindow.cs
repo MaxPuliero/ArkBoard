@@ -24,9 +24,11 @@ namespace ArkBoard
         StackPanel properties;
         Border inspector;
         ColumnDefinition inspectorColumn;
-        Slider opacitySlider;
+        internal Slider opacitySlider;
         WindowTransparency transparency;
         TextBlock opacityValue;
+        internal StackPanel opacityControls;
+        internal Button topmostButton, lockButton;
         TextBox rotationBox, scaleBox;
         Button flipXButton, flipYButton;
         Button removeMaskButton;
@@ -41,7 +43,7 @@ namespace ArkBoard
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
-        bool busy;
+        bool busy, locked;
         bool testMode;
         readonly Brush panel = Brush("#232323");
         readonly Brush text = Brush("#ECECEC");
@@ -82,12 +84,47 @@ namespace ArkBoard
             SourceInitialized += delegate
             {
                 try { int dark = 1; DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, 4); } catch { }
-                transparency = new WindowTransparency(HwndSource.FromHwnd(new WindowInteropHelper(this).Handle));
+                HwndSource source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+                transparency = new WindowTransparency(source);
+                source.AddHook(LockHitTest);
                 ApplyWindowOpacity();
             };
             Refresh();
         }
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+        const int WmNcHitTest = 0x0084;
+        static readonly IntPtr HitTransparent = new IntPtr(-1);
+        IntPtr LockHitTest(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (!locked || message != WmNcHitTest) return IntPtr.Zero;
+            long packed = lParam.ToInt64();
+            Point screen = new Point(unchecked((short)(packed & 0xffff)), unchecked((short)((packed >> 16) & 0xffff)));
+            DependencyObject hit = InputHitTest(PointFromScreen(screen)) as DependencyObject;
+            if (IsLockInteractive(hit)) return IntPtr.Zero;
+            handled = true; return HitTransparent;
+        }
+        internal bool IsLockInteractive(DependencyObject hit)
+        { return IsWithin(hit, opacityControls) && !IsWithin(hit, topmostButton); }
+        static bool IsWithin(DependencyObject child, DependencyObject ancestor)
+        {
+            if (child == null || ancestor == null) return false;
+            for (DependencyObject current = child; current != null; current = VisualTreeHelper.GetParent(current))
+                if (current == ancestor) return true;
+            return false;
+        }
+        internal void SetLocked(bool value)
+        {
+            locked = value;
+            lockButton.Content = new TextBlock { Text = value ? "\uE72E" : "\uE785", FontFamily = new FontFamily("Segoe MDL2 Assets") };
+            lockButton.Background = value ? Brush("#555555") : Brush("#323232");
+            SetStatus(value ? "Board locked · Clicks pass through to the application below" : "Board unlocked");
+        }
+        internal bool Locked { get { return locked; } }
+        void SetTopmost(bool value)
+        {
+            Topmost = value; topmostItem.IsChecked = value;
+            if (topmostButton != null) topmostButton.Background = value ? Brush("#555555") : Brush("#323232");
+        }
         static Brush Brush(string color) { return (Brush)new BrushConverter().ConvertFromString(color); }
         void ApplyStyles()
         {
@@ -272,7 +309,7 @@ namespace ArkBoard
             gridItem = MenuHeader("Grid"); gridItem.IsCheckable = true; gridItem.IsChecked = true;
             gridItem.Click += delegate { Board.ShowGrid = gridItem.IsChecked; Board.InvalidateVisual(); }; view.Items.Add(gridItem);
             topmostItem = MenuHeader("Always on Top"); topmostItem.IsCheckable = true;
-            topmostItem.Click += delegate { Topmost = topmostItem.IsChecked; }; view.Items.Add(topmostItem);
+            topmostItem.Click += delegate { SetTopmost(topmostItem.IsChecked); }; view.Items.Add(topmostItem);
             MenuItem settings = MenuHeader("_Settings"); menu.Items.Add(settings);
             autoSortingItem = MenuHeader("Auto-Sorting"); autoSortingItem.IsCheckable = true; autoSortingItem.IsChecked = true;
             autoSortingItem.Click += delegate
@@ -346,8 +383,24 @@ namespace ArkBoard
             quickPanel.Children.Add(QuickControl("Alt+S / R / M", "Reset scale / rotation / mask"));
             quickPanel.Children.Add(QuickControl("Ctrl+A / Ctrl+P", "Normalize / pack"));
             quickPanel.Children.Add(QuickControl("A", "Select / deselect all"));
-            quickPanel.Children.Add(QuickControl("F", "Fit all"));
-            quickControlsExpander.Content = quickPanel;
+            quickPanel.Children.Add(QuickControl("F / Shift+F", "Fit all / selection"));
+            quickPanel.Children.Add(QuickControl("Ctrl+N / O / S", "New / open / save"));
+            quickPanel.Children.Add(QuickControl("Ctrl+Shift+S", "Save as"));
+            quickPanel.Children.Add(QuickControl("Ctrl+I / V", "Import / paste"));
+            quickPanel.Children.Add(QuickControl("Ctrl+T", "Add text"));
+            quickPanel.Children.Add(QuickControl("Ctrl+C / Ctrl+D / Del", "Copy / duplicate / delete"));
+            quickPanel.Children.Add(QuickControl("Ctrl+Y / Ctrl+Shift+Z", "Redo"));
+            quickPanel.Children.Add(QuickControl("Ctrl+Z", "Undo"));
+            quickPanel.Children.Add(QuickControl("H / V", "Flip horizontal / vertical"));
+            quickPanel.Children.Add(QuickControl("R / Shift+R", "Rotate ±15°"));
+            quickPanel.Children.Add(QuickControl("Arrows / Shift+Arrows", "Move 1 / 10 units"));
+            quickPanel.Children.Add(QuickControl("1 / + / −", "Zoom 100 / in / out"));
+            quickPanel.Children.Add(QuickControl("] / [", "Front / back"));
+            quickPanel.Children.Add(QuickControl("Ctrl+Shift+0", "Opacity 100%"));
+            quickPanel.Children.Add(QuickControl("Esc", "Clear selection / confirm text"));
+            quickPanel.Children.Add(QuickControl("F1", "About ArkBoard"));
+            quickControlsExpander.Content = new ScrollViewer { Content = quickPanel, MaxHeight = 455,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
             System.Windows.Automation.AutomationProperties.SetName(quickControlsExpander, "Quick controls");
             Panel.SetZIndex(quickControlsExpander, 20); area.Children.Add(quickControlsExpander);
             inspector = new Border { Background = panel, BorderBrush = Brush("#393939"), BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(28, 28, 28, 18) };
@@ -409,7 +462,7 @@ namespace ArkBoard
             Grid.SetRow(bar, 2); Root.Children.Add(bar);
             zoom = Label("100%", 12, text); zoom.VerticalAlignment = VerticalAlignment.Center; zoom.Margin = new Thickness(16, 0, 20, 0); DockPanel.SetDock(zoom, Dock.Right); bar.Children.Add(zoom);
             count = Label("", 12, secondary); count.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(count, Dock.Right); bar.Children.Add(count);
-            StackPanel opacityControls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 20, 0) };
+            opacityControls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 20, 0) };
             DockPanel.SetDock(opacityControls, Dock.Right); bar.Children.Add(opacityControls);
             TextBlock opacityLabel = Label("Opacity", 12, secondary); opacityLabel.VerticalAlignment = VerticalAlignment.Center; opacityControls.Children.Add(opacityLabel);
             opacitySlider = new Slider { Minimum = 5, Maximum = 100, Value = 100, SmallChange = 1, LargeChange = 5,
@@ -420,6 +473,14 @@ namespace ArkBoard
             opacityValue = Label("100%", 12, text); opacityValue.Width = 36; opacityValue.VerticalAlignment = VerticalAlignment.Center; opacityControls.Children.Add(opacityValue);
             Button opacityReset = Button("100%", () => SetWindowOpacity(100), "Reset opacity · Ctrl+Shift+0");
             opacityReset.FontSize = 11; opacityReset.Padding = new Thickness(6, 1, 6, 1); opacityReset.Margin = new Thickness(6, 0, 0, 0); opacityControls.Children.Add(opacityReset);
+            topmostButton = Button("\uE890", () => SetTopmost(!Topmost), "Always on Top");
+            topmostButton.Tag = null;
+            topmostButton.FontFamily = new FontFamily("Segoe MDL2 Assets"); topmostButton.Width = 30; topmostButton.Padding = new Thickness(4, 1, 4, 1);
+            topmostButton.Margin = new Thickness(8, 0, 0, 0); opacityControls.Children.Add(topmostButton);
+            lockButton = Button("\uE785", () => SetLocked(!locked), "Lock board · Keep opacity and unlock available");
+            lockButton.Tag = null;
+            lockButton.FontFamily = new FontFamily("Segoe MDL2 Assets"); lockButton.Width = 30; lockButton.Padding = new Thickness(4, 1, 4, 1);
+            lockButton.Margin = new Thickness(4, 0, 0, 0); opacityControls.Children.Add(lockButton);
             opacitySlider.ValueChanged += delegate { ApplyWindowOpacity(); };
             status = Label("Ready · Drop an image to get started", 12, secondary); status.TextWrapping = TextWrapping.NoWrap; status.TextTrimming = TextTrimming.CharacterEllipsis;
             status.Margin = new Thickness(20, 0, 14, 0); status.VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(status);
@@ -799,11 +860,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.9.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.9.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.9.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

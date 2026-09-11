@@ -120,6 +120,21 @@ namespace ArkBoard
             ,{ "Image pasted", new[]{ "Image pasted", "Immagine incollata", "画像を貼り付けました" } }
             ,{ "Masked image pasted", new[]{ "Masked image pasted", "Immagine mascherata incollata", "マスク画像を貼り付けました" } }
             ,{ "Text copied", new[]{ "Text copied", "Testo copiato", "テキストをコピーしました" } }
+            ,{ "Board locked · Clicks pass through to the application below", new[]{ "Board locked · Clicks pass through to the application below", "Board bloccata · I click passano all'applicazione sottostante", "ボードをロック · クリックは背後のアプリに届きます" } }
+            ,{ "Board unlocked", new[]{ "Board unlocked", "Board sbloccata", "ボードのロックを解除" } }
+            ,{ "Fit all / selection", new[]{ "Fit all / selection", "Adatta tutto / selezione", "全体 / 選択範囲を表示" } }
+            ,{ "New / open / save", new[]{ "New / open / save", "Nuovo / apri / salva", "新規 / 開く / 保存" } }
+            ,{ "Save as", new[]{ "Save as", "Salva con nome", "名前を付けて保存" } }
+            ,{ "Import / paste", new[]{ "Import / paste", "Importa / incolla", "読み込み / 貼り付け" } }
+            ,{ "Add text", new[]{ "Add text", "Aggiungi testo", "テキストを追加" } }
+            ,{ "Copy / duplicate / delete", new[]{ "Copy / duplicate / delete", "Copia / duplica / elimina", "コピー / 複製 / 削除" } }
+            ,{ "Undo / redo", new[]{ "Undo / redo", "Annulla / ripeti", "元に戻す / やり直す" } }
+            ,{ "Flip horizontal / vertical", new[]{ "Flip horizontal / vertical", "Rifletti orizzontale / verticale", "左右 / 上下反転" } }
+            ,{ "Rotate ±15°", new[]{ "Rotate ±15°", "Ruota ±15°", "±15°回転" } }
+            ,{ "Move 1 / 10 units", new[]{ "Move 1 / 10 units", "Sposta di 1 / 10 unità", "1 / 10単位移動" } }
+            ,{ "Zoom 100 / in / out", new[]{ "Zoom 100 / in / out", "Zoom 100 / avanti / indietro", "100% / 拡大 / 縮小" } }
+            ,{ "Front / back", new[]{ "Front / back", "Primo piano / fondo", "前面 / 背面" } }
+            ,{ "Clear selection / confirm text", new[]{ "Clear selection / confirm text", "Deseleziona / conferma testo", "選択解除 / テキスト確定" } }
         };
 
         internal static string T(string english)

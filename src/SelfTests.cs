@@ -291,8 +291,19 @@ namespace ArkBoard
                 window.quickControlsExpander.HorizontalAlignment == HorizontalAlignment.Left &&
                 ((SolidColorBrush)window.quickControlsExpander.Background).Color.A == 217,
                 "Quick Controls starts expanded at the bottom-left with an 85 percent opaque backplate");
+            ScrollViewer quickScroll = window.quickControlsExpander.Content as ScrollViewer;
+            Check(quickScroll != null && ((StackPanel)quickScroll.Content).Children.Count == 32 && quickScroll.MaxHeight == 455,
+                "Quick Controls lists every implemented shortcut in a bounded scrollable panel");
             Check(window.Resources[typeof(Expander)] is Style && ((Style)window.Resources[typeof(Expander)]).Setters.Count > 0,
                 "Quick Controls and Layers use the square outline expander style");
+            Check(window.topmostButton != null && window.lockButton != null && window.opacityControls.Children.Contains(window.lockButton),
+                "Eye and lock controls sit beside the opacity controls");
+            window.SetLocked(true);
+            Check(window.Locked && window.IsLockInteractive(window.opacitySlider) && window.IsLockInteractive(window.lockButton) &&
+                !window.IsLockInteractive(window.topmostButton) && !window.IsLockInteractive(window.Board),
+                "Locked mode passes canvas and eye input through while opacity and unlock remain interactive");
+            Capture(window, Path.Combine(folder, "ui-locked.png"));
+            window.SetLocked(false); Check(!window.Locked, "Board lock can be released from its persistent control");
             Check(BoardSurface.DragZoomTarget(1, 180, false) > 2.7 && BoardSurface.DragZoomTarget(1, 180, true) < .38,
                 "Alt plus middle-button vertical drag zooms down by default and supports inversion");
             window.SetLanguage(UiLanguage.Italian);
