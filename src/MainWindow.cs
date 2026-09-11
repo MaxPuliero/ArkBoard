@@ -717,13 +717,26 @@ namespace ArkBoard
         void NewProject() { if (ConfirmDiscard()) { Board.FinishGesture(); Document.Reset(); SetStatus("New Project"); } }
         void OpenDialog()
         {
-            var dialog = new OpenFileDialog { Title = "Open Project", Filter = "ArkBoard projects|*.arkboard;*.refcanvas;*.zip|All files|*.*" };
+            var dialog = new OpenFileDialog { Title = "Open Project", Filter = "ArkBoard and BeeRef projects|*.arkboard;*.refcanvas;*.zip;*.bee|All files|*.*" };
             if (dialog.ShowDialog(this) == true) OpenProject(dialog.FileName);
         }
         public void OpenProject(string path)
         {
             if (busy || !ConfirmDiscard()) return;
-            try { Board.FinishGesture(); Mouse.OverrideCursor = Cursors.Wait; Document.Load(path); SetStatus("Project opened · All images are embedded"); }
+            try
+            {
+                Board.FinishGesture(); Mouse.OverrideCursor = Cursors.Wait;
+                if (BeeImporter.IsBeeFile(path))
+                {
+                    BeeImportResult imported = BeeImporter.Load(path);
+                    Document.ReplaceWithImported(imported.Items, imported.Assets); Board.Fit(false);
+                    string message = Localization.T("BeeRef project imported") + " · " + imported.Items.Count + " " + Localization.T("objects");
+                    if (imported.SkippedItems > 0) message += " · " + imported.SkippedItems + " " + Localization.T("skipped");
+                    if (imported.IgnoredEffects > 0) message += " · " + imported.IgnoredEffects + " " + Localization.T("effects ignored");
+                    status.Text = message;
+                }
+                else { Document.Load(path); SetStatus("Project opened · All images are embedded"); }
+            }
             catch (Exception ex) { Error("Unable to open project", ex); }
             finally { Mouse.OverrideCursor = null; }
         }
@@ -757,11 +770,17 @@ namespace ArkBoard
             {
                 Point center = Board.ToWorld(e.GetPosition(Board));
                 var sources = Importer.Extract(e.Data);
-                if (sources.Count == 1 && sources[0].Location != null && (sources[0].Location.EndsWith(".arkboard", StringComparison.OrdinalIgnoreCase) || sources[0].Location.EndsWith(".refcanvas", StringComparison.OrdinalIgnoreCase)))
+                if (sources.Count == 1 && IsProjectPath(sources[0].Location))
                     OpenProject(sources[0].Location);
                 else await ImportSources(sources, center);
             }
             catch (Exception ex) { Error("Import failed", ex); }
+        }
+        static bool IsProjectPath(string path)
+        {
+            return path != null && (path.EndsWith(".arkboard", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".refcanvas", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                BeeImporter.IsBeeFile(path));
         }
         async void Paste()
         {
@@ -895,11 +914,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.10.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.10.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeは読み取り専用でインポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.10.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.10.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

@@ -116,6 +116,9 @@ namespace ArkBoard
             ,{ "Size normalized · Aspect ratios preserved", new[]{ "Size normalized · Aspect ratios preserved", "Dimensioni uniformate · Proporzioni mantenute", "サイズを統一 · 縦横比を維持" } }
             ,{ "Images packed · Sizes and rotations preserved", new[]{ "Images packed · Sizes and rotations preserved", "Immagini compattate · Dimensioni e rotazioni mantenute", "画像を整列 · サイズと回転を維持" } }
             ,{ "Project opened · All images are embedded", new[]{ "Project opened · All images are embedded", "Progetto aperto · Tutte le immagini sono incorporate", "プロジェクトを開きました · 全画像を埋め込み済み" } }
+            ,{ "BeeRef project imported", new[]{ "BeeRef project imported", "Progetto BeeRef importato", "BeeRefプロジェクトを読み込みました" } }
+            ,{ "skipped", new[]{ "skipped", "ignorati", "スキップ" } }
+            ,{ "effects ignored", new[]{ "effects ignored", "effetti non importati", "未対応エフェクト" } }
             ,{ "Saved · Images embedded in the project", new[]{ "Saved · Images embedded in the project", "Salvato · Immagini incorporate nel progetto", "保存しました · 画像はプロジェクトに埋め込み済み" } }
             ,{ "Image pasted", new[]{ "Image pasted", "Immagine incollata", "画像を貼り付けました" } }
             ,{ "Masked image pasted", new[]{ "Masked image pasted", "Immagine mascherata incollata", "マスク画像を貼り付けました" } }

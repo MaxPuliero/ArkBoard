@@ -6,6 +6,11 @@ A portable reference-image canvas for Windows. Projects contain all their image 
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
 
+## In development
+
+- Open BeeRef `.bee` versions 1 and 2 as read-only imports for migration into ArkBoard. Embedded images, text, stacking order, transforms and crops are transferred; source files are never overwritten.
+- Per-image opacity and grayscale are reported but intentionally ignored during BeeRef import.
+
 ## Cross-application overlay lock fix in 1.10.1
 
 - Locked ArkBoard now uses a native layered click-through window, so viewport input reaches applications in other processes such as ZBrush.
@@ -60,7 +65,7 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 
 ## Start
 
-Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible.
+Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible. BeeRef `.bee` projects can be opened as read-only imports and then saved as new `.arkboard` projects.
 
 ## Mask refinement and clipboard in 1.7.0
 
@@ -158,6 +163,8 @@ The bottom **Opacity** slider changes the entire window, including images and th
 
 **.arkboard is a standard ZIP archive** containing `manifest.json` and `assets/<sha256>.<extension>`. Manifest version 1 records image layout, version 2 adds text, version 3 adds non-destructive image-mask insets, and version 4 adds per-object PSD layer visibility. Transforms apply local flips, clockwise rotation in degrees, then translation. Positions are canvas units.
 
+BeeRef format versions 1 and 2 can be imported from `.bee` SQLite projects. ArkBoard transfers embedded images, text, stacking order, position, scale, rotation, horizontal flips and crops. Per-image opacity and grayscale effects are reported but ignored. The source `.bee` is opened read-only and is never overwritten; saving the imported board creates an ArkBoard project.
+
 Original image bytes are preserved and ZIP-compressed without additional lossy compression. JPEG/PNG files are already compressed and may not become much smaller. Clipboard bitmaps are stored as PNG. Identical image assets are stored only once, even when used multiple times. Projects never depend on external file paths or URLs. To extract images, open a copy of the project as a ZIP.
 
 Saving writes a temporary file beside the destination and replaces the project after completion. Invalid projects are rejected without replacing the currently open board. Undo/redo retains 40 operations for the current session. There is no automatic crash recovery; save with Ctrl+S. Closing prompts you to save unsaved changes.
@@ -169,6 +176,7 @@ Saving writes a temporary file beside the destination and replaces the project a
 - Multiple-image transforms operate around each image's own center; there is no group transform handle.
 - Up to 100 images per import, 100 MB and 80 megapixels per image. Web downloads are limited to 50 MB with a timeout.
 - Project loading supports up to 10,000 items and 1 GB of embedded image-file bytes before decoding. Practical capacity depends on RAM; image pixels are decoded in memory.
+- BeeRef import supports native `.bee` versions 1 and 2. Compressed SQLAR entries and unknown future item types are skipped.
 - Browser drag-and-drop compatibility varies by site and browser.
 
 ## Build and verification

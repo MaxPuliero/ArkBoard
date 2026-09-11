@@ -207,6 +207,11 @@ namespace ArkBoard
             Items.Clear(); Assets.Clear(); Selected.Clear(); undo.Clear(); redo.Clear();
             Zoom = 1; PanX = PanY = 0; Path = null; Dirty = false; Notify();
         }
+        internal void ReplaceWithImported(List<ImageItem> items, Dictionary<string, AssetData> assets)
+        {
+            Items = items; Assets = assets; Selected.Clear(); undo.Clear(); redo.Clear();
+            Zoom = 1; PanX = PanY = 0; Path = null; Dirty = true; Notify();
+        }
         public Rect Bounds(bool selectedOnly)
         {
             Rect r = Rect.Empty;

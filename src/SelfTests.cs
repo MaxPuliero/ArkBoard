@@ -141,6 +141,32 @@ namespace ArkBoard
             AssetData green = Sample(640, 360, Color.FromRgb(55, 139, 129), "03 / ATMOSPHERE");
             Check(blue.Bitmap.PixelWidth == 600 && blue.Bitmap.PixelHeight == 400, "PNG decode preserves source dimensions");
             Check(AssetData.Create(blue.Bytes).Key == blue.Key, "Identical images have identical content hashes");
+            string beeV2Path = Path.Combine(folder, "beeref-v2-source.bee");
+            using (Stream source = typeof(SelfTests).Assembly.GetManifestResourceStream("ArkBoard.TestBeeRefV2"))
+            using (Stream target = File.Create(beeV2Path)) source.CopyTo(target);
+            byte[] beeV2Before = File.ReadAllBytes(beeV2Path);
+            BeeImportResult beeV2 = BeeImporter.Load(beeV2Path);
+            Check(beeV2.Items.Count == 2 && beeV2.Assets.Count == 1 && beeV2.SkippedItems == 0,
+                "BeeRef v2 import reads embedded images and text without skipped items");
+            ImageItem beeText = beeV2.Items[0], beeImage = beeV2.Items[1];
+            Check(beeText.Text == "Bee note" && beeImage.Name == "source.png" && Near(beeImage.Width, 240) && Near(beeImage.Height, 240) &&
+                Near(beeImage.X, -110) && Near(beeImage.Y, -100) && Near(beeImage.Rotation, 90) && beeImage.FlipX,
+                "BeeRef import converts stacking order, scale, rotation, flip and top-left coordinates");
+            Check(Near(beeImage.MaskLeft, 1.0 / 3) && Near(beeImage.MaskBottom, 1.0 / 3) && beeV2.IgnoredEffects == 1,
+                "BeeRef crop becomes a non-destructive mask and unsupported visual effects are reported");
+            Check(File.ReadAllBytes(beeV2Path).SequenceEqual(beeV2Before), "BeeRef import never modifies the source database");
+            var beeDoc = new BoardDocument(); beeDoc.ReplaceWithImported(beeV2.Items, beeV2.Assets);
+            Check(beeDoc.Dirty && beeDoc.Path == null, "Imported BeeRef data requires saving as a new ArkBoard project");
+            string beeConvertedPath = Path.Combine(folder, "beeref-converted.arkboard"); beeDoc.Save(beeConvertedPath);
+            var beeConverted = new BoardDocument(); beeConverted.Load(beeConvertedPath);
+            Check(beeConverted.Items.Count == 2 && beeConverted.Items[1].HasMask && beeConverted.Items[1].FlipX,
+                "BeeRef data survives conversion to the native ArkBoard format");
+            string beeV1Path = Path.Combine(folder, "beeref-v1-source.bee");
+            using (Stream source = typeof(SelfTests).Assembly.GetManifestResourceStream("ArkBoard.TestBeeRefV1"))
+            using (Stream target = File.Create(beeV1Path)) source.CopyTo(target);
+            BeeImportResult beeV1 = BeeImporter.Load(beeV1Path);
+            Check(beeV1.Items.Count == 1 && beeV1.Items[0].Name == "test.png" && beeV1.Assets.Count == 1,
+                "Legacy BeeRef v1 projects import without an in-place schema migration");
             AssetData psd = AssetData.Create(SamplePsd());
             Check(psd.IsPsd && psd.Psd.Layers.Count == 2 && psd.Psd.Layers[0].Name == "Bottom Blue" && psd.Psd.Layers[1].Name == "Top Red",
                 "Basic PSD import reads named raster layers with raw and PackBits channel data");
@@ -288,6 +314,10 @@ namespace ArkBoard
             var window = new MainWindow(true) { ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000 };
             window.Show();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            window.OpenProject(beeV2Path);
+            Check(window.Document.Items.Count == 2 && window.Document.Path == null && window.Document.Dirty,
+                "Open Project routes BeeRef files through read-only conversion instead of native project loading");
+            Capture(window, Path.Combine(folder, "ui-beeref-import.png")); window.Document.Reset();
             Check(!WindowTransparency.IsLayered(new System.Windows.Interop.WindowInteropHelper(window).Handle), "Opaque windows start without the layered transparency path");
             window.Board.ZoomAt(new Point(100, 100), 1);
             Check(RenderOptions.GetBitmapScalingMode(window.Board) == BitmapScalingMode.LowQuality, "Interaction uses fast bitmap sampling");
