@@ -272,6 +272,44 @@ namespace ArkBoard
                     Math.Abs((rotationHandles[k] - rotationCorners[k]).Length - Math.Sqrt(27 * 27 * 2)) < .001) &&
                     sortBoard.RotationHandleAt(sortFirst, rotationHandles[2]) == 2,
                 "Four inset rotation anchors stay clear of the corner scale handles and have generous hit targets");
+            var groupDoc = new BoardDocument();
+            var groupFirst = new ImageItem { Id = "group-first", X = 0, Y = 0, Width = 100, Height = 50, FlipX = true, MaskLeft = .1 };
+            var groupSecond = new ImageItem { Id = "group-second", X = 200, Y = 100, Width = 50, Height = 100, Rotation = 30 };
+            groupDoc.Items.Add(groupFirst); groupDoc.Items.Add(groupSecond);
+            groupDoc.Selected.Add(groupFirst.Id); groupDoc.Selected.Add(groupSecond.Id);
+            var groupBoard = new BoardSurface(groupDoc); Rect groupBounds = groupBoard.GroupBounds();
+            Point[] groupCorners = groupBoard.GroupCorners(), groupRotationHandles = groupBoard.GroupRotationHandles();
+            Check(groupBoard.HasGroupTransformSelection && Near(groupBounds.Left, -50) && Near(groupBounds.Top, -25) &&
+                groupCorners.Length == 4 && Near(groupCorners[0].X, groupBounds.Left) && Near(groupCorners[0].Y, groupBounds.Top),
+                "Multiple selected images expose one axis-aligned group bounding box");
+            Check(groupBoard.GroupCornerAt(groupCorners[2]) == 2 && groupRotationHandles.Length == 4 &&
+                groupBoard.GroupRotationHandleAt(groupRotationHandles[1]) == 1,
+                "Group bounding box exposes corner scale handles and inset rotation anchors");
+            Dictionary<string, ImageItem> groupBases = groupDoc.Selection.ToDictionary(i => i.Id, i => i.Copy());
+            Point fixedAnchor = groupBounds.TopLeft; Vector groupDiagonal = groupBounds.BottomRight - fixedAnchor;
+            groupDoc.Checkpoint();
+            double groupFactor = BoardSurface.ApplyGroupScale(groupDoc.Selection, groupBases, fixedAnchor, groupDiagonal,
+                fixedAnchor + groupDiagonal * 1.5);
+            Check(Near(groupFactor, 1.5) && Near(groupFirst.Width, 150) && Near(groupFirst.Height, 75) &&
+                Near(groupFirst.X, 25) && Near(groupFirst.Y, 12.5) && Near(groupSecond.X, 325) && Near(groupSecond.Y, 162.5) &&
+                groupFirst.FlipX && Near(groupFirst.MaskLeft, .1),
+                "Group scaling preserves proportions, relative spacing, flips and masks around the opposite corner");
+            groupDoc.Undo(); groupFirst = groupDoc.Items[0]; groupSecond = groupDoc.Items[1];
+            Check(Near(groupFirst.X, 0) && Near(groupFirst.Width, 100) && Near(groupSecond.X, 200),
+                "Group scaling is restored by one undo step");
+            groupBounds = groupBoard.GroupBounds(); Point groupCenter = new Point(groupBounds.X + groupBounds.Width / 2, groupBounds.Y + groupBounds.Height / 2);
+            groupBases = groupDoc.Selection.ToDictionary(i => i.Id, i => i.Copy()); groupDoc.Checkpoint();
+            BoardSurface.ApplyGroupRotation(groupDoc.Selection, groupBases, groupCenter, 90);
+            Check(Near(groupFirst.Rotation, 90) && Near(groupSecond.Rotation, 120) &&
+                Near((new Point(groupFirst.X, groupFirst.Y) - groupCenter).Length, (new Point(0, 0) - groupCenter).Length) &&
+                Near((new Point(groupSecond.X, groupSecond.Y) - groupCenter).Length, (new Point(200, 100) - groupCenter).Length),
+                "Group rotation updates every image angle and position around the common center");
+            groupDoc.Undo(); groupFirst = groupDoc.Items[0]; groupSecond = groupDoc.Items[1];
+            Check(Near(groupFirst.X, 0) && Near(groupFirst.Rotation, 0) && Near(groupSecond.X, 200) && Near(groupSecond.Rotation, 30),
+                "Group rotation is restored by one undo step");
+            var groupText = new ImageItem { Id = "group-text", Text = "Text", Width = 40, Height = 20 };
+            groupDoc.Items.Add(groupText); groupDoc.Selected.Add(groupText.Id);
+            Check(!groupBoard.HasGroupTransformSelection, "Mixed image and text selections do not expose image-only group transforms");
             using (Stream cursorStream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor"))
             {
                 Check(cursorStream != null, "The rotation cursor is embedded in the portable executable");
@@ -417,6 +455,9 @@ namespace ArkBoard
             Check(Near(stableScreen.X, stableAfter.X) && Near(stableScreen.Y, stableAfter.Y), "Inspector visibility does not shift image coordinates");
             Capture(window, Path.Combine(folder, "ui-unselected.png"));
             window.Document.Selected.Add(wi[0].Id); window.Document.Selected.Add(wi[1].Id); window.Document.Notify();
+            Check(window.Board.HasGroupTransformSelection && window.Board.GroupCorners().Length == 4,
+                "The live canvas exposes group transform controls for a multi-image selection");
+            Capture(window, Path.Combine(folder, "ui-group-selection.png"));
             double savedWidth = wi[0].Width, savedX = wi[0].X;
             window.ResetRotation();
             Check(Near(wi[0].Rotation, 0) && Near(wi[1].Rotation, 0) && Near(wi[2].Rotation, 5) &&

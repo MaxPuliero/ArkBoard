@@ -1,10 +1,14 @@
-# ArkBoard 1.11.0
+# ArkBoard 1.12.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Group transforms in 1.12.0
+
+- Multiple selected images share a group bounding box with proportional corner scaling and rotation around the common center. Relative spacing, individual proportions, flips and masks are preserved, and the complete transform is undoable in one step.
 
 ## BeeRef import in 1.11.0
 
@@ -184,11 +188,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.11.0
-Start-Process .\dist-arkboard-1.11.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.11.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.12.0
+Start-Process .\dist-arkboard-1.12.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.12.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.11.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, BeeRef v1/v2 read-only migration, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.12.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, BeeRef v1/v2 read-only migration, multi-image group scaling and rotation, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

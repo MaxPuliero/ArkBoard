@@ -40,6 +40,9 @@ namespace ArkBoard
         ImageItem transformStart;
         Point anchor;
         Vector diagonal;
+        Rect groupStartBounds = Rect.Empty;
+        Point groupCenter;
+        double groupRotationDelta;
         double startAngle, startZoom;
         int maskEdge = -1;
         string draggedItemId;
@@ -132,7 +135,10 @@ namespace ArkBoard
         }
         internal Point[] RotationHandles(ImageItem item)
         {
-            Point[] corners = item.Corners().Select(ToScreen).ToArray();
+            return RotationHandles(item.Corners().Select(ToScreen).ToArray());
+        }
+        static Point[] RotationHandles(Point[] corners)
+        {
             var handles = new Point[4];
             for (int index = 0; index < 4; index++)
             {
@@ -142,6 +148,40 @@ namespace ArkBoard
                 handles[index] = corners[index] + next * 27 + previous * 27;
             }
             return handles;
+        }
+        internal bool HasGroupTransformSelection
+        { get { return Document.Selection.Count() > 1 && Document.Selection.All(i => !i.IsText); } }
+        internal Rect GroupBounds()
+        { return HasGroupTransformSelection ? Document.Bounds(true) : Rect.Empty; }
+        static Point[] RectCorners(Rect bounds)
+        { return new[] { bounds.TopLeft, bounds.TopRight, bounds.BottomRight, bounds.BottomLeft }; }
+        internal Point[] GroupCorners()
+        {
+            Rect bounds = GroupBounds();
+            return bounds.IsEmpty ? new Point[0] : RectCorners(bounds).Select(ToScreen).ToArray();
+        }
+        Point[] GroupControlCorners()
+        {
+            if (gesture != "grouprotate" || groupStartBounds.IsEmpty) return GroupCorners();
+            Matrix rotation = Matrix.Identity; rotation.RotateAt(groupRotationDelta, groupCenter.X, groupCenter.Y);
+            return RectCorners(groupStartBounds).Select(p => ToScreen(rotation.Transform(p))).ToArray();
+        }
+        internal Point[] GroupRotationHandles()
+        {
+            Point[] corners = GroupControlCorners();
+            return corners.Length == 4 ? RotationHandles(corners) : new Point[0];
+        }
+        internal int GroupCornerAt(Point screen)
+        {
+            Point[] corners = GroupCorners();
+            for (int index = 0; index < corners.Length; index++) if ((corners[index] - screen).Length < 11) return index;
+            return -1;
+        }
+        internal int GroupRotationHandleAt(Point screen)
+        {
+            Point[] handles = GroupRotationHandles();
+            for (int index = 0; index < handles.Length; index++) if ((handles[index] - screen).Length <= 14) return index;
+            return -1;
         }
         internal int RotationHandleAt(ImageItem item, Point screen)
         {
@@ -314,6 +354,13 @@ namespace ArkBoard
                     }
                 }
             }
+            if (HasGroupTransformSelection)
+            {
+                Point[] corners = GroupControlCorners(); Pen pen = new Pen(accent, 1.5);
+                for (int side = 0; side < 4; side++) dc.DrawLine(pen, corners[side], corners[(side + 1) % 4]);
+                foreach (Point corner in corners) dc.DrawRectangle(background, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
+                foreach (Point handle in GroupRotationHandles()) DrawRotationAnchor(dc, handle, pen);
+            }
             if (!marquee.IsEmpty)
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(32, 169, 169, 169)), new Pen(accent, 1), marquee);
             if (gesture == "textsize")
@@ -373,8 +420,29 @@ namespace ArkBoard
             if (FitOnEmptyDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if (!shiftDown) MaskEditingId = null;
+            if (HasGroupTransformSelection)
+            {
+                int rotationHandle = shiftDown ? -1 : GroupRotationHandleAt(startScreen);
+                int corner = GroupCornerAt(startScreen);
+                if (rotationHandle >= 0 || corner >= 0)
+                {
+                    originals = Document.Selection.ToDictionary(i => i.Id, i => i.Copy());
+                    groupStartBounds = Document.Bounds(true);
+                    groupCenter = new Point(groupStartBounds.X + groupStartBounds.Width / 2, groupStartBounds.Y + groupStartBounds.Height / 2);
+                    if (rotationHandle >= 0)
+                    {
+                        gesture = "grouprotate"; groupRotationDelta = 0;
+                        startAngle = Math.Atan2(startWorld.Y - groupCenter.Y, startWorld.X - groupCenter.X) * 180 / Math.PI;
+                    }
+                    else
+                    {
+                        Point[] corners = RectCorners(groupStartBounds); gesture = "groupresize";
+                        anchor = corners[(corner + 2) % 4]; diagonal = corners[corner] - anchor;
+                    }
+                }
+            }
             ImageItem single = Document.Selected.Count == 1 ? Document.Selection.FirstOrDefault() : null;
-            if (single != null)
+            if (gesture == null && single != null)
             {
                 if (!shiftDown && !single.IsText && RotationHandleAt(single, startScreen) >= 0)
                 {
@@ -444,7 +512,12 @@ namespace ArkBoard
                 if (previewChanged) InvalidateVisual();
                 if (TextToolArmed) { Cursor = Cursors.Cross; return; }
                 Cursor = SpaceDown ? Cursors.ScrollAll : hovered != null ? Cursors.SizeAll : Cursors.Arrow;
-                if (Document.Selected.Count == 1)
+                if (HasGroupTransformSelection)
+                {
+                    if (GroupCornerAt(screen) >= 0) Cursor = Cursors.SizeNWSE;
+                    else if (!shiftDown && GroupRotationHandleAt(screen) >= 0) Cursor = rotateCursor;
+                }
+                else if (Document.Selected.Count == 1)
                 {
                     ImageItem i = Document.Selection.FirstOrDefault();
                     if (i != null && i.Corners().Any(p => (ToScreen(p) - screen).Length < 11)) Cursor = Cursors.SizeNWSE;
@@ -493,6 +566,15 @@ namespace ArkBoard
                     foreach (ImageItem i in Document.Selection)
                     { ImageItem old = originals[i.Id]; i.X = old.X + delta.X; i.Y = old.Y + delta.Y; }
                 }
+                else if (gesture == "groupresize")
+                    ApplyGroupScale(Document.Selection, originals, anchor, diagonal, world);
+                else if (gesture == "grouprotate")
+                {
+                    double angle = Math.Atan2(world.Y - groupCenter.Y, world.X - groupCenter.X) * 180 / Math.PI;
+                    groupRotationDelta = angle - startAngle;
+                    if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) groupRotationDelta = Math.Round(groupRotationDelta / 15) * 15;
+                    ApplyGroupRotation(Document.Selection, originals, groupCenter, groupRotationDelta);
+                }
                 else
                 {
                     ImageItem item = Document.Items.FirstOrDefault(i => i.Id == transformStart.Id);
@@ -526,6 +608,37 @@ namespace ArkBoard
             if (HoveredImageId != null) { HoveredImageId = null; InvalidateVisual(); }
         }
         public static double NormalizeAngle(double angle) { return ((angle % 360) + 360) % 360; }
+        internal static double ApplyGroupScale(IEnumerable<ImageItem> items, IDictionary<string, ImageItem> bases,
+            Point fixedAnchor, Vector startDiagonal, Point current)
+        {
+            if (bases == null || bases.Count == 0 || startDiagonal.LengthSquared < .000001) return 1;
+            double factor = Vector.Multiply(current - fixedAnchor, startDiagonal) / startDiagonal.LengthSquared;
+            double minimum = bases.Values.Max(i => 1.0 / Math.Min(i.Width, i.Height));
+            double maximum = bases.Values.Min(i => 1000000.0 / Math.Max(i.Width, i.Height));
+            factor = Math.Max(minimum, Math.Min(maximum, factor));
+            foreach (ImageItem item in items)
+            {
+                ImageItem basis;
+                if (!bases.TryGetValue(item.Id, out basis)) continue;
+                item.X = fixedAnchor.X + (basis.X - fixedAnchor.X) * factor;
+                item.Y = fixedAnchor.Y + (basis.Y - fixedAnchor.Y) * factor;
+                item.Width = basis.Width * factor; item.Height = basis.Height * factor;
+            }
+            return factor;
+        }
+        internal static void ApplyGroupRotation(IEnumerable<ImageItem> items, IDictionary<string, ImageItem> bases,
+            Point center, double angle)
+        {
+            Matrix rotation = Matrix.Identity; rotation.Rotate(angle);
+            foreach (ImageItem item in items)
+            {
+                ImageItem basis;
+                if (!bases.TryGetValue(item.Id, out basis)) continue;
+                Vector offset = rotation.Transform(new Vector(basis.X - center.X, basis.Y - center.Y));
+                item.X = center.X + offset.X; item.Y = center.Y + offset.Y;
+                item.Rotation = NormalizeAngle(basis.Rotation + angle);
+            }
+        }
         internal static double DragZoomTarget(double initialZoom, double verticalDelta, bool inverted)
         { return Math.Max(.01, Math.Min(16, initialZoom * Math.Exp(verticalDelta * (inverted ? -1 : 1) / 180.0))); }
         protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -542,6 +655,7 @@ namespace ArkBoard
         public void FinishGesture()
         {
             gesture = null; marquee = Rect.Empty; originals = null; transformStart = null;
+            groupStartBounds = Rect.Empty; groupRotationDelta = 0;
             maskEdge = -1; draggedItemId = null;
             if (IsMouseCaptured) ReleaseMouseCapture(); Cursor = Cursors.Arrow; InvalidateVisual();
         }
