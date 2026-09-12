@@ -10,6 +10,7 @@ ArkBoard is a portable x64 WPF application for Windows 10/11, built with the .NE
 - `src/BoardSurface.cs`: canvas rendering, hit testing and pointer gestures.
 - `src/BoardCore.cs`: document model, undo/redo, embedded ZIP project format and layout helpers.
 - `src/BeeImporter.cs`: read-only BeeRef `.bee` v1/v2 SQLite migration importer using the Windows `winsqlite3.dll` system library.
+- `src/PureRefImporter.cs`: experimental read-only PureRef `.pur` legacy 1.10/1.11 migration importer for embedded PNG assets and basic item transforms.
 - `src/PsdSupport.cs`: intentionally basic 8-bit RGB PSD raster-layer decoder/compositor.
 - `src/TextEditing.cs`: canvas text creation and editing overlay.
 - `src/Localization.cs`: runtime English, Italian and Japanese translations.
@@ -28,3 +29,5 @@ Keep the assembly version, build default directory, README version and release f
 The UI is dark, square-edged and desaturated. The canvas must stay responsive at large window sizes. Window opacity uses native layered-window alpha only below 100%. Locked overlay mode forces a native layered click-through main window and shows a separate control window for opacity, Always on Top and unlock; that strip clamps to 50% opacity. Text objects support move and proportional scale; images also support rotate, flip and non-destructive masks. Multiple selected images use one axis-aligned group box: corner scaling preserves proportions and relative spacing, while rotation changes every image angle and position around the common center in one undoable gesture. PSD support excludes blend modes, effects, Photoshop masks, adjustments, smart objects, 16/32-bit data, ZIP layer compression and PSB.
 
 BeeRef support is intentionally an import-only migration path. Open `.bee` files with SQLite read-only flags, never migrate or overwrite them, leave the resulting document dirty with no native path so Save uses a new `.arkboard`, and keep malformed-row and size-limit handling defensive. Versions 1 and 2 import embedded images, text, stacking, transforms and crop masks; per-image opacity, grayscale, compressed SQLAR data and unknown item types remain unsupported and must be reported or skipped without affecting valid rows.
+
+PureRef support is also import-only and experimental. Only legacy `.pur` 1.10/1.11 files are recognized; the format was reverse engineered from the MIT-licensed FyorDev/PureRef-format project. Import embedded PNG images plus basic transforms and simple text, but reject PureRef 2.x. External/duplicate images, image-attached text and non-rectangular crops are intentionally skipped. Text and transform fidelity must be treated as best effort until fixtures from real PureRef projects cover it.

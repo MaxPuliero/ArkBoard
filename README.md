@@ -1,10 +1,14 @@
-# ArkBoard 1.12.0
+# ArkBoard 1.12.1
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Experimental PureRef legacy import in 1.12.1
+
+- Open legacy PureRef 1.10/1.11 `.pur` files as read-only migration projects. Embedded PNGs, basic image transforms and simple text are imported, but this is experimental: layout and text fidelity are best effort. PureRef 2, external/duplicate images, image-attached text and non-rectangular crops remain unsupported.
 
 ## Group transforms in 1.12.0
 
@@ -69,7 +73,7 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 
 ## Start
 
-Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible. BeeRef `.bee` projects can be opened as read-only imports and then saved as new `.arkboard` projects.
+Extract the ZIP and run **ArkBoard.exe**. Keep **ArkBoard.exe.config** beside it. No installer, account, Python or development SDK is required. Requirements: Windows 10/11 x64 and .NET Framework 4.8. Open **Example.arkboard** to try a sample board. Existing RefCanvas projects remain compatible. BeeRef `.bee` projects and legacy PureRef 1.10/1.11 `.pur` projects can be opened as read-only imports and then saved as new `.arkboard` projects. PureRef support is experimental and PureRef 2 projects are not supported.
 
 ## Mask refinement and clipboard in 1.7.0
 
@@ -169,6 +173,8 @@ The bottom **Opacity** slider changes the entire window, including images and th
 
 BeeRef format versions 1 and 2 can be imported from `.bee` SQLite projects. ArkBoard transfers embedded images, text, stacking order, position, scale, rotation, horizontal flips and crops. Per-image opacity and grayscale effects are reported but ignored. The source `.bee` is opened read-only and is never overwritten; saving the imported board creates an ArkBoard project.
 
+PureRef legacy 1.10/1.11 `.pur` projects can be imported read-only. ArkBoard transfers embedded PNG images, basic position, scale, rotation, horizontal flips, stacking and simple text. This migration path is experimental: transform and text-layout fidelity is best effort. External images, duplicate links, image-attached text and non-rectangular crops are skipped. PureRef 2 uses a different format and is not supported.
+
 Original image bytes are preserved and ZIP-compressed without additional lossy compression. JPEG/PNG files are already compressed and may not become much smaller. Clipboard bitmaps are stored as PNG. Identical image assets are stored only once, even when used multiple times. Projects never depend on external file paths or URLs. To extract images, open a copy of the project as a ZIP.
 
 Saving writes a temporary file beside the destination and replaces the project after completion. Invalid projects are rejected without replacing the currently open board. Undo/redo retains 40 operations for the current session. There is no automatic crash recovery; save with Ctrl+S. Closing prompts you to save unsaved changes.
@@ -188,11 +194,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.12.0
-Start-Process .\dist-arkboard-1.12.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.12.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.12.1
+Start-Process .\dist-arkboard-1.12.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.12.1' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.12.0`; failures produce `FAILED.txt`. They cover persistence, embedded assets, BeeRef v1/v2 read-only migration, multi-image group scaling and rotation, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.12.1`; failures produce `FAILED.txt`. They cover persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

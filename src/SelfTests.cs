@@ -41,6 +41,26 @@ namespace ArkBoard
         static void Be16(BinaryWriter writer, int value) { writer.Write((byte)(value >> 8)); writer.Write((byte)value); }
         static void Be32(BinaryWriter writer, int value)
         { writer.Write((byte)(value >> 24)); writer.Write((byte)(value >> 16)); writer.Write((byte)(value >> 8)); writer.Write((byte)value); }
+        static void Be64(BinaryWriter writer, ulong value)
+        { for (int shift = 56; shift >= 0; shift -= 8) writer.Write((byte)(value >> shift)); }
+        static void BeDouble(BinaryWriter writer, double value) { byte[] bytes = BitConverter.GetBytes(value); Array.Reverse(bytes); writer.Write(bytes); }
+        static void PurString(BinaryWriter writer, string value) { byte[] bytes = Encoding.BigEndianUnicode.GetBytes(value); Be32(writer, bytes.Length); writer.Write(bytes); }
+        static byte[] SamplePureRef(AssetData image)
+        {
+            using (var stream = new MemoryStream()) using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write(new byte[224]); stream.Position = 0; Be32(writer, 8); writer.Write(Encoding.BigEndianUnicode.GetBytes("1.10"));
+                stream.Position = 12; Be16(writer, 1); Be16(writer, 1); stream.Position = 24; Be32(writer, 12); stream.Position = 40; Be32(writer, 64); stream.Position = 108; Be32(writer, 1);
+                stream.Position = 112; BeDouble(writer, -10000); BeDouble(writer, -10000); BeDouble(writer, 10000); BeDouble(writer, 10000); BeDouble(writer, 1);
+                stream.Position = 176; BeDouble(writer, 1); stream.Position = 208; BeDouble(writer, 1); stream.Position = 224;
+                ulong imageStart = (ulong)stream.Position; writer.Write(image.Bytes); ulong imageEnd = (ulong)stream.Position;
+                long itemStart = stream.Position; Be64(writer, 0); Be32(writer, 34); writer.Write(Encoding.BigEndianUnicode.GetBytes("GraphicsImageItem")); Be32(writer, 0); PurString(writer, "BruteForceLoaded"); BeDouble(writer, 1);
+                BeDouble(writer, 0); BeDouble(writer, 1); BeDouble(writer, 0); BeDouble(writer, -1); BeDouble(writer, 0); BeDouble(writer, 0); BeDouble(writer, 200); BeDouble(writer, 300); BeDouble(writer, 1); Be32(writer, 0); BeDouble(writer, 1);
+                long itemEnd = stream.Position; stream.Position = itemStart; Be64(writer, (ulong)itemEnd); stream.Position = itemEnd; PurString(writer, ""); long refs = stream.Position;
+                Be32(writer, 0); Be64(writer, imageStart); Be64(writer, imageEnd); stream.Position = 16; Be64(writer, (ulong)refs);
+                return stream.ToArray();
+            }
+        }
         static byte[] PsdChannel(byte[] pixels, bool rle)
         {
             using (var stream = new MemoryStream()) using (var writer = new BinaryWriter(stream))
@@ -141,6 +161,12 @@ namespace ArkBoard
             AssetData green = Sample(640, 360, Color.FromRgb(55, 139, 129), "03 / ATMOSPHERE");
             Check(blue.Bitmap.PixelWidth == 600 && blue.Bitmap.PixelHeight == 400, "PNG decode preserves source dimensions");
             Check(AssetData.Create(blue.Bytes).Key == blue.Key, "Identical images have identical content hashes");
+            string pureRefPath = Path.Combine(folder, "pureref-legacy-source.pur"); File.WriteAllBytes(pureRefPath, SamplePureRef(blue)); byte[] pureRefBefore = File.ReadAllBytes(pureRefPath);
+            PureRefImportResult pureRef = PureRefImporter.Load(pureRefPath); ImageItem pureRefImage = pureRef.Items.Single();
+            Check(pureRef.Items.Count == 1 && pureRef.Assets.Count == 1 && Near(pureRefImage.X, 200) && Near(pureRefImage.Y, 300) &&
+                Near(pureRefImage.Width, 600) && Near(pureRefImage.Height, 400) && Near(pureRefImage.Rotation, 90),
+                "PureRef legacy import reads embedded PNG data and basic transforms");
+            Check(File.ReadAllBytes(pureRefPath).SequenceEqual(pureRefBefore), "PureRef import never modifies the source project");
             string beeV2Path = Path.Combine(folder, "beeref-v2-source.bee");
             using (Stream source = typeof(SelfTests).Assembly.GetManifestResourceStream("ArkBoard.TestBeeRefV2"))
             using (Stream target = File.Create(beeV2Path)) source.CopyTo(target);
