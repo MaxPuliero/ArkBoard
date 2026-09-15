@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Input;
@@ -388,12 +389,12 @@ namespace ArkBoard
             await Task.Delay(300);
             Check(RenderOptions.GetBitmapScalingMode(window.Board) == BitmapScalingMode.HighQuality, "Full-quality bitmap sampling returns after interaction settles");
             double fullCanvasWidth = window.Board.ActualWidth;
-            Check(window.quickControlsExpander.IsExpanded && window.quickControlsExpander.VerticalAlignment == VerticalAlignment.Bottom &&
+            Check(!window.quickControlsExpander.IsExpanded && window.quickControlsExpander.VerticalAlignment == VerticalAlignment.Bottom &&
                 window.quickControlsExpander.HorizontalAlignment == HorizontalAlignment.Left &&
                 ((SolidColorBrush)window.quickControlsExpander.Background).Color.A == 217,
-                "Quick Controls starts expanded at the bottom-left with an 85 percent opaque backplate");
+                "Quick Controls starts collapsed at the bottom-left with an 85 percent opaque backplate");
             ScrollViewer quickScroll = window.quickControlsExpander.Content as ScrollViewer;
-            Check(quickScroll != null && ((StackPanel)quickScroll.Content).Children.Count == 32 && quickScroll.MaxHeight == 455,
+            Check(quickScroll != null && ((StackPanel)quickScroll.Content).Children.Count == 35 && quickScroll.MaxHeight == 455,
                 "Quick Controls lists every implemented shortcut in a bounded scrollable panel");
             Check(window.Resources[typeof(Expander)] is Style && ((Style)window.Resources[typeof(Expander)]).Setters.Count > 0,
                 "Quick Controls and Layers use the square outline expander style");
@@ -426,7 +427,12 @@ namespace ArkBoard
             window.quickControlsExpander.IsExpanded = false;
             Check(!window.quickControlsExpander.IsExpanded, "Quick Controls can be collapsed to its header");
             Capture(window, Path.Combine(folder, "ui-quick-controls-collapsed.png"));
-            window.quickControlsExpander.IsExpanded = true;
+            window.SetMinimalUi(true);
+            Check(window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Collapsed,
+                "Tab minimal mode hides chrome while leaving the inspector workflow available");
+            window.SetMinimalUi(false);
+            Check(!window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Visible && !window.quickControlsExpander.IsExpanded,
+                "Show UI restores the application chrome while Quick Controls stays collapsed");
             Capture(window, Path.Combine(folder, "ui-empty.png"));
             await window.ImportSources(new List<ImportSource> { new ImportSource { Bytes = blue.Bytes, Name = "Shapes.png" }, new ImportSource { Bytes = pink.Bytes, Name = "Color.png" }, new ImportSource { Bytes = green.Bytes, Name = "Atmosphere.png" } }, new Point(0, 0));
             Check(window.Document.Items.Count == 3, "UI import pipeline adds and selects multiple images");
@@ -613,13 +619,24 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Check(window.layersExpander.Visibility == Visibility.Visible && window.layersList.Children.Count == 2,
                 "Selecting one PSD exposes its layer visibility list in the inspector");
-            Check((string)((CheckBox)window.layersList.Children[0]).Content == psd.Psd.Layers[psd.Psd.Layers.Count - 1].Name,
+            Check((string)((ToggleButton)window.layersList.Children[0]).Content == psd.Psd.Layers[psd.Psd.Layers.Count - 1].Name,
                 "PSD layers are listed in the same visual order as Photoshop");
             uiPsd.Width = 420; uiPsd.Height = 420; window.Document.Notify(); window.Board.Fit(false);
             Capture(window, Path.Combine(folder, "ui-psd-layers.png"));
             window.SetPsdLayerVisibility(uiPsd.Id, 1, false);
             Check(!uiPsd.LayerVisibility[1] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
                 "The inspector layer toggle updates the selected PSD instance");
+            window.ToggleOtherPsdLayers(uiPsd.Id, 0);
+            Check(uiPsd.LayerVisibility.All(v => v), "Alt-click restores all other PSD layers after isolation");
+            window.ToggleOtherPsdLayers(uiPsd.Id, 0);
+            Check(uiPsd.LayerVisibility.SequenceEqual(new[] { true, false }), "Alt-click isolates the chosen PSD layer");
+            window.ToggleOtherPsdLayers(uiPsd.Id, 0);
+            window.CyclePsdLayer(-1);
+            Check(uiPsd.LayerVisibility.SequenceEqual(new[] { false, true }), "Page Down first isolates the topmost visible PSD layer");
+            window.CyclePsdLayer(-1);
+            Check(uiPsd.LayerVisibility.SequenceEqual(new[] { true, false }), "Page Down advances through PSD layers one at a time");
+            window.CyclePsdLayer(1);
+            Check(uiPsd.LayerVisibility.SequenceEqual(new[] { false, true }), "Page Up advances through PSD layers in the opposite direction");
             uiPsd.Width /= 2; uiPsd.Height /= 2; uiPsd.Rotation = 61; uiPsd.MaskLeft = .2;
             window.ResetSize(); Check(Near(uiPsd.Width, 2) && Near(uiPsd.Height, 2), "Reset scale restores 100 percent dimensions for Alt+S");
             window.ResetRotation(); Check(Near(uiPsd.Rotation, 0), "Reset rotation restores zero degrees for Alt+R");

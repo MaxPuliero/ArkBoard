@@ -6,9 +6,13 @@ A portable reference-image canvas for Windows. Projects contain all their image 
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
 
-## Experimental PureRef legacy import in 1.12.1
+## PureRef import and interface controls in 1.12.1
 
 - Open legacy PureRef 1.10/1.11 `.pur` files as read-only migration projects. Embedded PNGs, basic image transforms and simple text are imported, but this is experimental: layout and text fidelity are best effort. PureRef 2, external/duplicate images, image-attached text and non-rectangular crops remain unsupported.
+- **Quick Controls** starts collapsed. Press **Tab** for a minimal canvas that hides the menu, status controls, text tool and Quick Controls while keeping the selection inspector available. Press Tab again or choose **Show UI** from the canvas context menu to restore the interface.
+- PSD layer visibility uses compact eye controls matching ArkBoard's dark square-edged interface. **Alt+click** a layer to isolate it or restore the other layers.
+- **Page Up / Page Down** first isolates the highest visible PSD layer, then cycles through the layer stack one layer at a time.
+- The application and `.arkboard` file icons use the refreshed ArkBoard artwork at 32, 64, 128 and 256 pixels.
 
 ## Group transforms in 1.12.0
 

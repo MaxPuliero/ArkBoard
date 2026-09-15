@@ -40,6 +40,7 @@ namespace ArkBoard
             { "Fit Selection", new[]{ "Fit Selection", "Adatta selezione", "選択範囲を表示" } },
             { "Zoom 100%", new[]{ "Zoom 100%", "Zoom 100%", "ズーム 100%" } },
             { "Opacity 100%", new[]{ "Opacity 100%", "Opacità 100%", "不透明度 100%" } },
+            { "Show UI", new[]{ "Show UI", "Mostra UI", "UIを表示" } },
             { "Grid", new[]{ "Grid", "Griglia", "グリッド" } },
             { "Always on Top", new[]{ "Always on Top", "Sempre in primo piano", "常に手前に表示" } },
             { "Auto-Sorting", new[]{ "Auto-Sorting", "Ordinamento automatico", "自動並べ替え" } },
@@ -138,6 +139,14 @@ namespace ArkBoard
             ,{ "Zoom 100 / in / out", new[]{ "Zoom 100 / in / out", "Zoom 100 / avanti / indietro", "100% / 拡大 / 縮小" } }
             ,{ "Front / back", new[]{ "Front / back", "Primo piano / fondo", "前面 / 背面" } }
             ,{ "Clear selection / confirm text", new[]{ "Clear selection / confirm text", "Deseleziona / conferma testo", "選択解除 / テキスト確定" } }
+            ,{ "Show / hide UI", new[]{ "Show / hide UI", "Mostra / nascondi UI", "UIを表示 / 非表示" } }
+            ,{ "Toggle other layers", new[]{ "Toggle other layers", "Attiva / disattiva gli altri livelli", "他のレイヤーを一括切替" } }
+            ,{ "Cycle PSD layers", new[]{ "Cycle PSD layers", "Scorri i livelli PSD", "PSDレイヤーを順に表示" } }
+            ,{ "Toggle layer · Alt+click toggles all other layers", new[]{ "Toggle layer · Alt+click toggles all other layers", "Attiva livello · Alt+click attiva/disattiva tutti gli altri", "レイヤー切替 · Alt+クリックで他を一括切替" } }
+            ,{ "UI hidden · Press Tab or right-click to show it", new[]{ "UI hidden · Press Tab or right-click to show it", "UI nascosta · Premi Tab o fai clic destro per mostrarla", "UIを非表示 · Tabまたは右クリックで表示" } }
+            ,{ "UI shown", new[]{ "UI shown", "UI visibile", "UIを表示しました" } }
+            ,{ "Other layers hidden", new[]{ "Other layers hidden", "Altri livelli nascosti", "他のレイヤーを非表示" } }
+            ,{ "All layers visible", new[]{ "All layers visible", "Tutti i livelli visibili", "すべてのレイヤーを表示" } }
         };
 
         internal static string T(string english)

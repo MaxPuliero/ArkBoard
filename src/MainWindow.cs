@@ -39,6 +39,8 @@ namespace ArkBoard
         internal Expander layersExpander;
         internal StackPanel layersList;
         internal Expander quickControlsExpander;
+        FrameworkElement menuBar, statusBar;
+        MenuItem showUiItem, showUiContextItem;
         Border layersSeparator;
         string layersUiKey;
         MenuItem undoMenuItem, redoMenuItem;
@@ -46,7 +48,7 @@ namespace ArkBoard
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
-        bool busy, locked;
+        bool busy, locked, minimalUi;
         bool testMode;
         readonly Brush panel = Brush("#232323");
         readonly Brush text = Brush("#ECECEC");
@@ -301,6 +303,7 @@ namespace ArkBoard
         void BuildMenu()
         {
             DockPanel bar = new DockPanel { Margin = new Thickness(12, 5, 12, 3) };
+            menuBar = bar;
             TextBlock brand = new TextBlock { Text = "ARKBOARD", FontWeight = FontWeights.SemiBold, FontSize = 12,
                 Foreground = Brush("#C2C2C2"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 24, 0) };
             bar.Children.Add(brand);
@@ -333,6 +336,8 @@ namespace ArkBoard
             view.Items.Add(MenuAction("Fit Selection", "Shift+F", () => Board.Fit(true)));
             view.Items.Add(MenuAction("Zoom 100%", "1", () => Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1)));
             view.Items.Add(MenuAction("Opacity 100%", "Ctrl+Shift+0", () => SetWindowOpacity(100)));
+            showUiItem = MenuHeader("Show UI"); showUiItem.IsCheckable = true; showUiItem.IsChecked = true; showUiItem.InputGestureText = "Tab";
+            showUiItem.Click += delegate { SetMinimalUi(!showUiItem.IsChecked); }; view.Items.Add(showUiItem);
             gridItem = MenuHeader("Grid"); gridItem.IsCheckable = true; gridItem.IsChecked = true;
             gridItem.Click += delegate { Board.ShowGrid = gridItem.IsChecked; Board.InvalidateVisual(); }; view.Items.Add(gridItem);
             topmostItem = MenuHeader("Always on Top"); topmostItem.IsCheckable = true;
@@ -390,7 +395,7 @@ namespace ArkBoard
             textToolButton.Background = Brush("#323232"); textToolButton.Foreground = Brush("#B0B0B0");
             System.Windows.Automation.AutomationProperties.SetName(textToolButton, "Text tool");
             Panel.SetZIndex(textToolButton, 20); area.Children.Add(textToolButton);
-            quickControlsExpander = new Expander { Header = Localization.T("QUICK CONTROLS"), Tag = "QUICK CONTROLS", IsExpanded = true, Foreground = secondary,
+            quickControlsExpander = new Expander { Header = Localization.T("QUICK CONTROLS"), Tag = "QUICK CONTROLS", IsExpanded = false, Foreground = secondary,
                 Background = Brush("#D9191919"), Padding = new Thickness(8), Width = 310,
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 0, 6) };
             var quickPanel = new StackPanel { Margin = new Thickness(0, 7, 0, 0) };
@@ -424,6 +429,9 @@ namespace ArkBoard
             quickPanel.Children.Add(QuickControl("1 / + / −", "Zoom 100 / in / out"));
             quickPanel.Children.Add(QuickControl("] / [", "Front / back"));
             quickPanel.Children.Add(QuickControl("Ctrl+Shift+0", "Opacity 100%"));
+            quickPanel.Children.Add(QuickControl("Alt + layer click", "Toggle other layers"));
+            quickPanel.Children.Add(QuickControl("Page Up / Page Down", "Cycle PSD layers"));
+            quickPanel.Children.Add(QuickControl("Tab", "Show / hide UI"));
             quickPanel.Children.Add(QuickControl("Esc", "Clear selection / confirm text"));
             quickPanel.Children.Add(QuickControl("F1", "About ArkBoard"));
             var quickScroll = new ScrollViewer { Content = quickPanel, MaxHeight = 455,
@@ -489,6 +497,7 @@ namespace ArkBoard
         void BuildStatus()
         {
             DockPanel bar = new DockPanel { Background = Brush("#1F1F1F"), LastChildFill = true, Margin = new Thickness(0) };
+            statusBar = bar;
             Grid.SetRow(bar, 2); Root.Children.Add(bar);
             zoom = Label("100%", 12, text); zoom.VerticalAlignment = VerticalAlignment.Center; zoom.Margin = new Thickness(16, 0, 20, 0); DockPanel.SetDock(zoom, Dock.Right); bar.Children.Add(zoom);
             count = Label("", 12, secondary); count.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(count, Dock.Right); bar.Children.Add(count);
@@ -554,7 +563,24 @@ namespace ArkBoard
             rotateContextItem = MenuAction("Rotate 90°", "", () => Rotate(90)); menu.Items.Add(rotateContextItem);
             resetRotationContextItem = MenuAction("Reset Rotation", "Alt+R", ResetRotation); menu.Items.Add(resetRotationContextItem);
             menu.Items.Add(MenuAction("Delete", "Del", DeleteSelection)); menu.Items.Add(MenuSeparator());
-            menu.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false))); Board.ContextMenu = menu;
+            menu.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
+            showUiContextItem = MenuAction("Show UI", "Tab", () => SetMinimalUi(false)); menu.Items.Add(showUiContextItem);
+            Board.ContextMenu = menu;
+        }
+        internal bool MinimalUi { get { return minimalUi; } }
+        internal void SetMinimalUi(bool value)
+        {
+            minimalUi = value;
+            Root.RowDefinitions[0].Height = value ? new GridLength(0) : GridLength.Auto;
+            Root.RowDefinitions[2].Height = value ? new GridLength(0) : new GridLength(34);
+            menuBar.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            statusBar.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            quickControlsExpander.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            textToolButton.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            if (showUiItem != null) showUiItem.IsChecked = !value;
+            if (showUiContextItem != null) showUiContextItem.IsEnabled = value;
+            SetStatus(value ? "UI hidden · Press Tab or right-click to show it" : "UI shown");
+            Board.Focus();
         }
         void RefreshView() { zoom.Text = (Document.Zoom * 100).ToString("0.#", CultureInfo.CurrentCulture) + "%"; }
         void Refresh()
@@ -612,11 +638,37 @@ namespace ArkBoard
             for (int index = asset.Psd.Layers.Count - 1; index >= 0; index--)
             {
                 int layerIndex = index;
-                var check = new CheckBox { Content = asset.Psd.Layers[index].Name, IsChecked = item.LayerVisibility[index],
-                    Foreground = text, Margin = new Thickness(0, 3, 0, 3), ToolTip = "Toggle this raster layer" };
-                check.Click += delegate { SetPsdLayerVisibility(item.Id, layerIndex, check.IsChecked == true); };
+                var check = new ToggleButton { Content = asset.Psd.Layers[index].Name, IsChecked = item.LayerVisibility[index],
+                    Foreground = text, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0),
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 2, 0, 2),
+                    ToolTip = Localization.T("Toggle layer · Alt+click toggles all other layers") };
+                check.Template = LayerToggleTemplate();
+                check.Click += delegate
+                {
+                    if ((Keyboard.Modifiers & ModifierKeys.Alt) != 0) ToggleOtherPsdLayers(item.Id, layerIndex);
+                    else SetPsdLayerVisibility(item.Id, layerIndex, check.IsChecked == true);
+                };
                 layersList.Children.Add(check);
             }
+        }
+        ControlTemplate LayerToggleTemplate()
+        {
+            return (ControlTemplate)XamlReader.Parse(@"
+<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ToggleButton'>
+ <Border x:Name='row' Background='Transparent' Padding='2'>
+  <Grid><Grid.ColumnDefinitions><ColumnDefinition Width='28'/><ColumnDefinition Width='*'/></Grid.ColumnDefinitions>
+   <Border x:Name='iconBox' Width='20' Height='20' Background='#292929' BorderBrush='#4A4A4A' BorderThickness='1' HorizontalAlignment='Left'>
+    <TextBlock x:Name='eye' Text='&#xE890;' FontFamily='Segoe MDL2 Assets' FontSize='12' Foreground='#D0D0D0' HorizontalAlignment='Center' VerticalAlignment='Center'/>
+   </Border>
+   <ContentPresenter Grid.Column='1' VerticalAlignment='Center' Margin='4,0,0,0'/>
+  </Grid>
+ </Border>
+ <ControlTemplate.Triggers>
+  <Trigger Property='IsChecked' Value='False'><Setter TargetName='eye' Property='Opacity' Value='0.18'/><Setter TargetName='iconBox' Property='BorderBrush' Value='#383838'/></Trigger>
+  <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='row' Property='Background' Value='#303030'/><Setter TargetName='iconBox' Property='BorderBrush' Value='#777777'/></Trigger>
+  <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='iconBox' Property='BorderBrush' Value='#A9A9A9'/></Trigger>
+ </ControlTemplate.Triggers>
+</ControlTemplate>");
         }
         internal void SetPsdLayerVisibility(string itemId, int layerIndex, bool visible)
         {
@@ -627,6 +679,41 @@ namespace ArkBoard
             if (item.LayerVisibility[layerIndex] == visible) return;
             Document.Change(() => item.LayerVisibility[layerIndex] = visible);
             SetStatus(asset.Psd.Layers[layerIndex].Name + " " + Localization.T(visible ? "visible" : "hidden"));
+        }
+        internal void ToggleOtherPsdLayers(string itemId, int layerIndex)
+        {
+            ImageItem item = Document.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item == null || item.IsText || !Document.Assets.ContainsKey(item.Asset)) return;
+            AssetData asset = Document.Assets[item.Asset];
+            if (!asset.IsPsd || item.LayerVisibility == null || layerIndex < 0 || layerIndex >= item.LayerVisibility.Count) return;
+            bool hideOthers = item.LayerVisibility.Where((visible, index) => index != layerIndex).Any(visible => visible);
+            Document.Change(() =>
+            {
+                for (int index = 0; index < item.LayerVisibility.Count; index++)
+                    item.LayerVisibility[index] = index == layerIndex || !hideOthers;
+            });
+            SetStatus(hideOthers ? "Other layers hidden" : "All layers visible");
+        }
+        internal void CyclePsdLayer(int direction)
+        {
+            ImageItem item = Document.Selection.Count() == 1 ? Document.Selection.First() : null;
+            if (item == null || item.IsText || !Document.Assets.ContainsKey(item.Asset)) return;
+            AssetData asset = Document.Assets[item.Asset];
+            if (!asset.IsPsd || item.LayerVisibility == null || item.LayerVisibility.Count == 0) return;
+            List<int> visible = Enumerable.Range(0, item.LayerVisibility.Count).Where(index => item.LayerVisibility[index]).ToList();
+            int target;
+            if (visible.Count != 1) target = visible.Count == 0 ? item.LayerVisibility.Count - 1 : visible.Max();
+            else
+            {
+                target = visible[0] + (direction >= 0 ? 1 : -1);
+                if (target >= item.LayerVisibility.Count) target = 0;
+                if (target < 0) target = item.LayerVisibility.Count - 1;
+            }
+            Document.Change(() =>
+            {
+                for (int index = 0; index < item.LayerVisibility.Count; index++) item.LayerVisibility[index] = index == target;
+            });
+            SetStatus(asset.Psd.Layers[target].Name + " " + Localization.T("visible"));
         }
         void EditSelection(Action<ImageItem> action)
         { if (!Document.Selection.Any()) return; Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in Document.Selection) action(i); }); }
@@ -897,6 +984,7 @@ namespace ArkBoard
             {
                 switch (e.Key)
                 {
+                    case Key.Tab: if (!e.IsRepeat) SetMinimalUi(!minimalUi); break;
                     case Key.Space: Board.SpaceDown = true; Board.Cursor = Cursors.ScrollAll; break;
                     case Key.A: if (shift) handled = false; else if (!e.IsRepeat) ToggleSelectAll(); break;
                     case Key.Delete: DeleteSelection(); break;
@@ -912,6 +1000,8 @@ namespace ArkBoard
                     case Key.Right: EditSelection(i => i.X += shift ? 10 : 1); break;
                     case Key.Up: EditSelection(i => i.Y -= shift ? 10 : 1); break;
                     case Key.Down: EditSelection(i => i.Y += shift ? 10 : 1); break;
+                    case Key.PageUp: if (!e.IsRepeat) CyclePsdLayer(1); break;
+                    case Key.PageDown: if (!e.IsRepeat) CyclePsdLayer(-1); break;
                     case Key.F1: Help(); break;
                     default: handled = false; break;
                 }
