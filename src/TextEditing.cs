@@ -135,7 +135,7 @@ namespace ArkBoard
             if (e.Key == Key.Escape && (textEditor != null || Board.TextToolArmed))
             { CommitText(); e.Handled = true; return true; }
             if (textEditor != null && e.Key == Key.S && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
-            { Save((Keyboard.Modifiers & ModifierKeys.Shift) != 0); e.Handled = true; return true; }
+            { BeginSave((Keyboard.Modifiers & ModifierKeys.Shift) != 0); e.Handled = true; return true; }
             return false;
         }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -18,6 +19,11 @@ namespace ArkBoard
 {
     public static class SelfTests
     {
+        sealed class RecordingProgress : IProgress<double>
+        {
+            internal readonly List<double> Values = new List<double>();
+            public void Report(double value) { Values.Add(value); }
+        }
         static readonly List<string> checks = new List<string>();
         static void Check(bool condition, string message)
         { if (!condition) throw new Exception("FAIL: " + message); checks.Add("PASS: " + message); }
@@ -243,10 +249,32 @@ namespace ArkBoard
             doc.Zoom = .73; doc.PanX = 71; doc.PanY = -23;
             string project = Path.Combine(folder, "roundtrip.refcanvas"); doc.Save(project);
             using (var file = File.OpenRead(project)) using (var zip = new ZipArchive(file, ZipArchiveMode.Read))
+            {
+                ZipArchiveEntry packedAsset = zip.Entries.Single(e => e.FullName.StartsWith("assets/"));
                 Check(zip.Entries.Count(e => e.FullName.StartsWith("assets/")) == 1, "Project packs duplicate images only once");
+                Check(BoardDocument.AssetCompression(blue.Key) == CompressionLevel.NoCompression && packedAsset.CompressedLength >= packedAsset.Length * .99,
+                    "Already-compressed image formats are stored without costly redundant ZIP compression");
+            }
             var read = new BoardDocument(); read.Load(project);
             Check(read.Items.Count == 2 && read.Assets.Count == 1 && read.Assets[blue.Key].Bytes.SequenceEqual(blue.Bytes), "ZIP round trip preserves exact original bytes without external paths");
             Check(read.Items[0].FlipX && read.Items[0].FlipY && Near(read.Items[0].Rotation, 37) && Near(read.Zoom, .73) && Near(read.PanY, -23), "ZIP round trip preserves transforms and viewport");
+            string asyncProject = Path.Combine(folder, "background-save.arkboard");
+            var saveProgress = new RecordingProgress(); Task asyncSave = doc.SaveAsync(asyncProject, saveProgress);
+            doc.Checkpoint(); await asyncSave;
+            Check(File.Exists(asyncProject) && saveProgress.Values.Count >= 2 && Near(saveProgress.Values.First(), 0) && Near(saveProgress.Values.Last(), 1),
+                "Background save reports determinate progress from zero through completion");
+            Check(doc.Dirty, "Changes made after a background-save snapshot remain marked as unsaved");
+            string largeSavePath = Path.Combine(folder, "background-save-42mb.arkboard");
+            byte[] largeBytes = new byte[42 * 1024 * 1024];
+            var largeDoc = new BoardDocument();
+            largeDoc.Assets["synthetic.png"] = new AssetData { Key = "synthetic.png", Bytes = largeBytes };
+            largeDoc.Items.Add(new ImageItem { Asset = "synthetic.png", Name = "42 MB benchmark", Width = 100, Height = 100 });
+            var largeProgress = new RecordingProgress(); Stopwatch saveWatch = Stopwatch.StartNew();
+            await largeDoc.SaveAsync(largeSavePath, largeProgress); saveWatch.Stop();
+            long largeSavedBytes = new FileInfo(largeSavePath).Length;
+            Check(largeSavedBytes >= 40L * 1024 * 1024 && saveWatch.Elapsed < TimeSpan.FromSeconds(15) && largeProgress.Values.Count >= 40,
+                "A 42 MB pre-compressed asset streams in background with granular progress (" + saveWatch.ElapsedMilliseconds + " ms)");
+            File.Delete(largeSavePath);
             doc.Change(() => doc.Items.RemoveAt(1)); doc.Save(project); read.Load(project);
             Check(read.Items.Count == 1 && !doc.Dirty, "Atomic overwrite replaces the saved project");
             string legacy = Path.Combine(folder, "legacy.refcanvas"); File.Copy(project, legacy, true);
@@ -486,6 +514,12 @@ namespace ArkBoard
             Capture(window, Path.Combine(folder, "ui-empty.png"));
             await window.ImportSources(new List<ImportSource> { new ImportSource { Bytes = blue.Bytes, Name = "Shapes.png" }, new ImportSource { Bytes = pink.Bytes, Name = "Color.png" }, new ImportSource { Bytes = green.Bytes, Name = "Atmosphere.png" } }, new Point(0, 0));
             Check(window.Document.Items.Count == 3, "UI import pipeline adds and selects multiple images");
+            string uiBackgroundSave = Path.Combine(folder, "ui-background-save.arkboard");
+            Task<bool> uiSaveTask = window.SaveInBackground(uiBackgroundSave);
+            Check(window.saveProgress.Visibility == Visibility.Visible, "Background save displays a slim progress bar at the bottom of the window");
+            window.saveProgress.Value = 55; Capture(window, Path.Combine(folder, "ui-saving.png"));
+            Check(await uiSaveTask && window.saveProgress.Visibility == Visibility.Collapsed && File.Exists(uiBackgroundSave),
+                "The save progress bar disappears after the atomic background save completes");
             Check(Near(fullCanvasWidth - window.Board.ActualWidth, 360), "Selecting images reveals the wider readable inspector and reserves its width");
             var wi = window.Document.Items;
             wi[0].X = 270; wi[0].Y = 200; wi[0].Rotation = -8;

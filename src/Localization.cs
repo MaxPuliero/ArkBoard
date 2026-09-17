@@ -126,6 +126,8 @@ namespace ArkBoard
             ,{ "skipped", new[]{ "skipped", "ignorati", "スキップ" } }
             ,{ "effects ignored", new[]{ "effects ignored", "effetti non importati", "未対応エフェクト" } }
             ,{ "Saved · Images embedded in the project", new[]{ "Saved · Images embedded in the project", "Salvato · Immagini incorporate nel progetto", "保存しました · 画像はプロジェクトに埋め込み済み" } }
+            ,{ "Saving project...", new[]{ "Saving project...", "Salvataggio del progetto...", "プロジェクトを保存中..." } }
+            ,{ "Saved snapshot · New changes remain unsaved", new[]{ "Saved snapshot · New changes remain unsaved", "Istantanea salvata · Le nuove modifiche non sono ancora salvate", "スナップショットを保存 · 新しい変更は未保存です" } }
             ,{ "Image pasted", new[]{ "Image pasted", "Immagine incollata", "画像を貼り付けました" } }
             ,{ "Masked image pasted", new[]{ "Masked image pasted", "Immagine mascherata incollata", "マスク画像を貼り付けました" } }
             ,{ "Text copied", new[]{ "Text copied", "Testo copiato", "テキストをコピーしました" } }

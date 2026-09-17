@@ -26,6 +26,7 @@ namespace ArkBoard
         Border inspector;
         ColumnDefinition inspectorColumn;
         internal Slider opacitySlider;
+        internal ProgressBar saveProgress;
         WindowTransparency transparency;
         WindowInputLock inputLock;
         internal LockControlsWindow lockControlsWindow;
@@ -51,7 +52,7 @@ namespace ArkBoard
         internal TextBox paddingBox;
         TextBlock paddingLabel;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
-        bool busy, locked, minimalUi;
+        bool busy, saving, locked, minimalUi;
         bool testMode;
         readonly Brush panel = Brush("#232323");
         readonly Brush text = Brush("#ECECEC");
@@ -92,7 +93,7 @@ namespace ArkBoard
             SizeChanged += delegate { PositionLockControls(); };
             StateChanged += delegate { PositionLockControls(); };
             Closed += delegate { LockControlsWindow old = lockControlsWindow; lockControlsWindow = null; if (old != null && old.IsVisible) old.Close(); };
-            Closing += delegate(object s, System.ComponentModel.CancelEventArgs e) { if (!testMode && (busy || !ConfirmDiscard())) e.Cancel = true; };
+            Closing += delegate(object s, System.ComponentModel.CancelEventArgs e) { if (!testMode && (busy || saving || !ConfirmDiscard())) e.Cancel = true; };
             SourceInitialized += delegate
             {
                 try { int dark = 1; DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, 4); } catch { }
@@ -315,8 +316,8 @@ namespace ArkBoard
             MenuItem file = MenuHeader("_File"); menu.Items.Add(file);
             file.Items.Add(MenuAction("New Project", "Ctrl+N", NewProject));
             file.Items.Add(MenuAction("Open Project...", "Ctrl+O", OpenDialog));
-            file.Items.Add(MenuAction("Save", "Ctrl+S", () => Save(false)));
-            file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => Save(true)));
+            file.Items.Add(MenuAction("Save", "Ctrl+S", () => BeginSave(false)));
+            file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => BeginSave(true)));
             file.Items.Add(MenuSeparator());
             file.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
             file.Items.Add(MenuSeparator()); file.Items.Add(MenuAction("Exit", "Alt+F4", Close));
@@ -508,9 +509,9 @@ namespace ArkBoard
         }
         void BuildStatus()
         {
+            Grid holder = new Grid(); statusBar = holder; Grid.SetRow(holder, 2); Root.Children.Add(holder);
             DockPanel bar = new DockPanel { Background = Brush("#1F1F1F"), LastChildFill = true, Margin = new Thickness(0) };
-            statusBar = bar;
-            Grid.SetRow(bar, 2); Root.Children.Add(bar);
+            holder.Children.Add(bar);
             zoom = Label("100%", 12, text); zoom.VerticalAlignment = VerticalAlignment.Center; zoom.Margin = new Thickness(16, 0, 20, 0); DockPanel.SetDock(zoom, Dock.Right); bar.Children.Add(zoom);
             count = Label("", 12, secondary); count.VerticalAlignment = VerticalAlignment.Center; DockPanel.SetDock(count, Dock.Right); bar.Children.Add(count);
             opacityControls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 20, 0) };
@@ -535,6 +536,13 @@ namespace ArkBoard
             opacitySlider.ValueChanged += delegate { ApplyWindowOpacity(); };
             status = Label("Ready · Drop an image to get started", 12, secondary); status.TextWrapping = TextWrapping.NoWrap; status.TextTrimming = TextTrimming.CharacterEllipsis;
             status.Margin = new Thickness(20, 0, 14, 0); status.VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(status);
+            saveProgress = new ProgressBar { Minimum = 0, Maximum = 100, Height = 3, VerticalAlignment = VerticalAlignment.Bottom,
+                Visibility = Visibility.Collapsed, IsHitTestVisible = false, Foreground = Brush("#D0D0D0"), Background = Brush("#353535"), BorderThickness = new Thickness(0) };
+            saveProgress.Template = (ControlTemplate)XamlReader.Parse(@"
+<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ProgressBar'>
+ <Grid Background='{TemplateBinding Background}'><Border x:Name='PART_Indicator' Background='{TemplateBinding Foreground}' HorizontalAlignment='Left'/></Grid>
+</ControlTemplate>");
+            Panel.SetZIndex(saveProgress, 2); holder.Children.Add(saveProgress);
         }
         internal void SetWindowOpacity(double percent)
         {
@@ -558,7 +566,7 @@ namespace ArkBoard
             menu.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
             menu.Items.Add(MenuAction("Add Text", "Ctrl+T", ActivateTextTool));
             menu.Items.Add(MenuAction("Open Project...", "Ctrl+O", OpenDialog));
-            menu.Items.Add(MenuAction("Save Project", "Ctrl+S", () => Save(false)));
+            menu.Items.Add(MenuAction("Save Project", "Ctrl+S", () => BeginSave(false)));
             menu.Items.Add(MenuSeparator());
             undoMenuItem = MenuAction("Undo", "Ctrl+Z", Document.Undo);
             redoMenuItem = MenuAction("Redo", "Ctrl+Y", Document.Redo);
@@ -869,6 +877,7 @@ namespace ArkBoard
         bool ConfirmDiscard()
         {
             CommitText();
+            if (saving) return false;
             if (!Document.Dirty) return true;
             bool? result = DarkDialog.ConfirmSave(this);
             return result == false || (result == true && Save(false));
@@ -881,7 +890,7 @@ namespace ArkBoard
         }
         public void OpenProject(string path)
         {
-            if (busy || !ConfirmDiscard()) return;
+            if (busy || saving || !ConfirmDiscard()) return;
             try
             {
                 Board.FinishGesture(); Mouse.OverrideCursor = Cursors.Wait;
@@ -910,16 +919,41 @@ namespace ArkBoard
         bool Save(bool saveAs)
         {
             CommitText();
-            string path = Document.Path;
-            if (saveAs || path == null)
-            {
-                var dialog = new SaveFileDialog { Title = "Save Project", Filter = "ArkBoard project|*.arkboard", DefaultExt = ".arkboard", AddExtension = true,
-                    FileName = path == null ? "Untitled.arkboard" : Path.GetFileName(path) };
-                if (dialog.ShowDialog(this) != true) return false; path = dialog.FileName;
-            }
+            string path; if (!TrySavePath(saveAs, out path)) return false;
             try { Mouse.OverrideCursor = Cursors.Wait; Document.Save(path); SetStatus("Saved · Images embedded in the project"); return true; }
             catch (Exception ex) { Error("Unable to save project", ex); return false; }
             finally { Mouse.OverrideCursor = null; }
+        }
+        bool TrySavePath(bool saveAs, out string path)
+        {
+            path = Document.Path;
+            if (!saveAs && path != null) return true;
+            var dialog = new SaveFileDialog { Title = "Save Project", Filter = "ArkBoard project|*.arkboard", DefaultExt = ".arkboard", AddExtension = true,
+                FileName = path == null ? "Untitled.arkboard" : Path.GetFileName(path) };
+            if (dialog.ShowDialog(this) != true) { path = null; return false; }
+            path = dialog.FileName; return true;
+        }
+        async void BeginSave(bool saveAs)
+        {
+            if (saving) return;
+            CommitText(); string path;
+            if (!TrySavePath(saveAs, out path)) return;
+            await SaveInBackground(path);
+        }
+        internal async Task<bool> SaveInBackground(string path)
+        {
+            if (saving || string.IsNullOrWhiteSpace(path)) return false;
+            saving = true; saveProgress.Value = 0; saveProgress.Visibility = Visibility.Visible;
+            SetStatus("Saving project...");
+            var progress = new Progress<double>(value => saveProgress.Value = Math.Max(0, Math.Min(100, value * 100)));
+            try
+            {
+                await Document.SaveAsync(path, progress);
+                SetStatus(Document.Dirty ? "Saved snapshot · New changes remain unsaved" : "Saved · Images embedded in the project");
+                return true;
+            }
+            catch (Exception ex) { Error("Unable to save project", ex); return false; }
+            finally { saving = false; saveProgress.Visibility = Visibility.Collapsed; }
         }
         async void ImportDialog()
         {
@@ -1044,7 +1078,7 @@ namespace ArkBoard
                 switch (e.Key)
                 {
                     case Key.N: NewProject(); break; case Key.O: OpenDialog(); break;
-                    case Key.S: Save(shift); break; case Key.I: ImportDialog(); break;
+                    case Key.S: BeginSave(shift); break; case Key.I: ImportDialog(); break;
                     case Key.Z: if (shift) Document.Redo(); else Document.Undo(); break;
                     case Key.Y: Document.Redo(); break; case Key.A: if (!shift) NormalizeSelected(); else handled = false; break;
                     case Key.P: PackImages(); break;
@@ -1084,11 +1118,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.13.2\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.14.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.13.2\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.14.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.13.2\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.14.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

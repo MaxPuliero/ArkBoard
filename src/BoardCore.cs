@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -169,6 +170,8 @@ namespace ArkBoard
         public double Zoom = 1, PanX = 0, PanY = 0;
         public string Path;
         public bool Dirty;
+        long revision;
+        internal long Revision { get { return revision; } }
         public event Action Changed;
         readonly List<List<ImageItem>> undo = new List<List<ImageItem>>();
         readonly List<List<ImageItem>> redo = new List<List<ImageItem>>();
@@ -181,20 +184,20 @@ namespace ArkBoard
         {
             undo.Add(Clone(Items));
             if (undo.Count > 40) undo.RemoveAt(0);
-            redo.Clear(); Dirty = true;
+            redo.Clear(); Dirty = true; revision++;
         }
         public void Change(Action action) { Checkpoint(); action(); CollectAssets(); Notify(); }
         public void Undo()
         {
             if (!CanUndo) return;
             redo.Add(Clone(Items)); Items = undo[undo.Count - 1]; undo.RemoveAt(undo.Count - 1);
-            Selected.IntersectWith(Items.Select(i => i.Id)); Dirty = true; CollectAssets(); Notify();
+            Selected.IntersectWith(Items.Select(i => i.Id)); Dirty = true; revision++; CollectAssets(); Notify();
         }
         public void Redo()
         {
             if (!CanRedo) return;
             undo.Add(Clone(Items)); Items = redo[redo.Count - 1]; redo.RemoveAt(redo.Count - 1);
-            Selected.IntersectWith(Items.Select(i => i.Id)); Dirty = true; CollectAssets(); Notify();
+            Selected.IntersectWith(Items.Select(i => i.Id)); Dirty = true; revision++; CollectAssets(); Notify();
         }
         public void CollectAssets()
         {
@@ -205,12 +208,12 @@ namespace ArkBoard
         public void Reset()
         {
             Items.Clear(); Assets.Clear(); Selected.Clear(); undo.Clear(); redo.Clear();
-            Zoom = 1; PanX = PanY = 0; Path = null; Dirty = false; Notify();
+            Zoom = 1; PanX = PanY = 0; Path = null; Dirty = false; revision++; Notify();
         }
         internal void ReplaceWithImported(List<ImageItem> items, Dictionary<string, AssetData> assets)
         {
             Items = items; Assets = assets; Selected.Clear(); undo.Clear(); redo.Clear();
-            Zoom = 1; PanX = PanY = 0; Path = null; Dirty = true; Notify();
+            Zoom = 1; PanX = PanY = 0; Path = null; Dirty = true; revision++; Notify();
         }
         public Rect Bounds(bool selectedOnly)
         {
@@ -236,30 +239,72 @@ namespace ArkBoard
             item.X = topLeft.X + item.Width / 2; item.Y = topLeft.Y + item.Height / 2;
             Items.Add(item); return item;
         }
-        public void Save(string path)
+        sealed class SaveSnapshot
         {
-            string full = System.IO.Path.GetFullPath(path);
+            internal Manifest Manifest;
+            internal Dictionary<string, byte[]> Assets;
+            internal long Revision;
+        }
+        SaveSnapshot SnapshotForSave()
+        {
+            List<ImageItem> items = Clone(Items);
+            return new SaveSnapshot
+            {
+                Manifest = new Manifest { Version = items.Any(i => i.LayerVisibility != null) ? 4 : items.Any(i => i.HasMask) ? 3 : items.Any(i => i.IsText) ? 2 : 1,
+                    Images = items, Zoom = Zoom, PanX = PanX, PanY = PanY },
+                Assets = items.Where(i => !i.IsText).Select(i => i.Asset).Distinct().ToDictionary(key => key, key => Assets[key].Bytes),
+                Revision = revision
+            };
+        }
+        internal static CompressionLevel AssetCompression(string key)
+        {
+            string extension = System.IO.Path.GetExtension(key).ToLowerInvariant();
+            return extension == ".png" || extension == ".jpg" || extension == ".gif" || extension == ".webp" || extension == ".ico"
+                ? CompressionLevel.NoCompression : CompressionLevel.Fastest;
+        }
+        static void WriteSnapshot(string full, SaveSnapshot snapshot, IProgress<double> progress)
+        {
             string temp = full + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
+                long total = Math.Max(1, snapshot.Assets.Values.Sum(bytes => bytes.LongLength));
+                long written = 0; if (progress != null) progress.Report(0);
                 using (FileStream file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Create))
                 {
-                    var manifest = new Manifest { Version = Items.Any(i => i.LayerVisibility != null) ? 4 : Items.Any(i => i.HasMask) ? 3 : Items.Any(i => i.IsText) ? 2 : 1,
-                        Images = Clone(Items), Zoom = Zoom, PanX = PanX, PanY = PanY };
                     using (Stream entry = zip.CreateEntry("manifest.json", CompressionLevel.Optimal).Open())
-                        new DataContractJsonSerializer(typeof(Manifest)).WriteObject(entry, manifest);
-                    foreach (string key in Items.Where(i => !i.IsText).Select(i => i.Asset).Distinct())
+                        new DataContractJsonSerializer(typeof(Manifest)).WriteObject(entry, snapshot.Manifest);
+                    foreach (KeyValuePair<string, byte[]> asset in snapshot.Assets)
                     {
-                        using (Stream entry = zip.CreateEntry("assets/" + key, CompressionLevel.Optimal).Open())
-                        { byte[] b = Assets[key].Bytes; entry.Write(b, 0, b.Length); }
+                        using (Stream entry = zip.CreateEntry("assets/" + asset.Key, AssetCompression(asset.Key)).Open())
+                        {
+                            byte[] bytes = asset.Value;
+                            for (int offset = 0; offset < bytes.Length;)
+                            {
+                                int count = Math.Min(1024 * 1024, bytes.Length - offset);
+                                entry.Write(bytes, offset, count); offset += count; written += count;
+                                if (progress != null) progress.Report(Math.Min(.99, (double)written / total));
+                            }
+                        }
                     }
                 }
                 if (File.Exists(full)) File.Replace(temp, full, null);
                 else File.Move(temp, full);
-                Path = full; Dirty = false; Notify();
+                if (progress != null) progress.Report(1);
             }
             finally { if (File.Exists(temp)) File.Delete(temp); }
+        }
+        public void Save(string path)
+        {
+            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave();
+            WriteSnapshot(full, snapshot, null);
+            Path = full; if (revision == snapshot.Revision) Dirty = false; Notify();
+        }
+        public async Task SaveAsync(string path, IProgress<double> progress)
+        {
+            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave();
+            await Task.Run(() => WriteSnapshot(full, snapshot, progress));
+            Path = full; if (revision == snapshot.Revision) Dirty = false; Notify();
         }
         public void Load(string path)
         {
@@ -322,7 +367,7 @@ namespace ArkBoard
             Zoom = Finite(manifest.Zoom) ? Math.Max(.01, Math.Min(16, manifest.Zoom)) : 1;
             PanX = Finite(manifest.PanX) && Math.Abs(manifest.PanX) < 1e9 ? manifest.PanX : 0;
             PanY = Finite(manifest.PanY) && Math.Abs(manifest.PanY) < 1e9 ? manifest.PanY : 0;
-            Path = System.IO.Path.GetFullPath(path); Dirty = false; Notify();
+            Path = System.IO.Path.GetFullPath(path); Dirty = false; revision++; Notify();
         }
         public static bool Finite(double n) { return !double.IsNaN(n) && !double.IsInfinity(n); }
         public static bool ValidMask(ImageItem i)
