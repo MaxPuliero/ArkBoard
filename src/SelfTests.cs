@@ -457,10 +457,32 @@ namespace ArkBoard
             Check(window.Board.Snapping, "The Settings snapping toggle updates the canvas behavior");
             window.snappingItem.IsChecked = false;
             window.snappingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            window.snappingContextItem.IsChecked = true;
+            window.snappingContextItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(window.Board.Snapping && window.snappingItem.IsChecked,
+                "The context Settings copy stays synchronized with the main Snapping toggle");
+            window.snappingContextItem.IsChecked = false;
+            window.snappingContextItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(window.paddingContextItem != null && window.paddingContextBox.Text == window.paddingBox.Text,
+                "The context Settings copy exposes the shared Image Padding control");
             window.OpenProject(beeV2Path);
             Check(window.Document.Items.Count == 2 && window.Document.Path == null && window.Document.Dirty,
                 "Open Project routes BeeRef files through read-only conversion instead of native project loading");
+            Check(window.recentProjects.Count == 1 && window.recentProjects[0] == Path.GetFullPath(beeV2Path),
+                "Successfully opened projects are added to the in-memory recent list");
             Capture(window, Path.Combine(folder, "ui-beeref-import.png")); window.Document.Reset();
+            Task<bool> loadTask = window.OpenProjectInBackground(project);
+            Check(window.saveProgress.Visibility == Visibility.Visible, "Project loading reuses the shared bottom progress bar");
+            window.saveProgress.Value = 55; Capture(window, Path.Combine(folder, "ui-loading.png"));
+            Check(await loadTask && window.saveProgress.Visibility == Visibility.Collapsed && window.Document.Path == Path.GetFullPath(project),
+                "Native projects load in background and hide the shared progress bar at completion");
+            window.AddRecentProject(beeV2Path); window.RefreshRecentMenu();
+            Check(window.recentProjects.SequenceEqual(new[] { Path.GetFullPath(beeV2Path), Path.GetFullPath(project) }) &&
+                window.openRecentItem.Items.Count == 2 && window.openRecentContextItem.Items.Count == 2 &&
+                ((MenuItem)window.openRecentItem.Items[0]).ToolTip.ToString() == Path.GetFullPath(beeV2Path) &&
+                ((MenuItem)window.openRecentContextItem.Items[0]).ToolTip.ToString() == Path.GetFullPath(beeV2Path),
+                "Open Recent exposes valid files in both menus in most-recent-first order");
+            window.Document.Reset();
             Check(!WindowTransparency.IsLayered(new System.Windows.Interop.WindowInteropHelper(window).Handle), "Opaque windows start without the layered transparency path");
             window.Board.ZoomAt(new Point(100, 100), 1);
             Check(RenderOptions.GetBitmapScalingMode(window.Board) == BitmapScalingMode.LowQuality, "Interaction uses fast bitmap sampling");
@@ -498,8 +520,8 @@ namespace ArkBoard
             Check((string)window.quickControlsExpander.Header == "COMANDI RAPIDI", "Italian UI can be selected at runtime");
             window.SetLanguage(UiLanguage.Japanese);
             Check((string)window.layersExpander.Header == "レイヤー", "Japanese UI can be selected at runtime");
-            Check(window.languageItems.Select(item => (string)item.Header).SequenceEqual(new[] { "English", "Italiano", "日本語" }),
-                "Language choices keep their native labels independently of the active UI language");
+            Check(window.languageItems.Select(item => (string)item.Header).SequenceEqual(new[] { "English", "Italiano", "日本語", "English", "Italiano", "日本語" }),
+                "Language choices keep their native labels in both menus independently of the active UI language");
             Capture(window, Path.Combine(folder, "ui-japanese.png"));
             window.SetLanguage(UiLanguage.English);
             window.quickControlsExpander.IsExpanded = false;
@@ -508,6 +530,10 @@ namespace ArkBoard
             window.SetMinimalUi(true);
             Check(window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Collapsed,
                 "Tab minimal mode hides chrome while leaving the inspector workflow available");
+            window.saveProgress.Value = 42; window.saveProgress.Visibility = Visibility.Visible;
+            Check(window.saveProgress.IsVisible && window.saveProgress.Width == 225 && window.saveProgress.Height == 10,
+                "The shared save/load progress overlay remains visible when application UI is hidden");
+            Capture(window, Path.Combine(folder, "ui-minimal-progress.png")); window.saveProgress.Visibility = Visibility.Collapsed;
             window.SetMinimalUi(false);
             Check(!window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Visible && !window.quickControlsExpander.IsExpanded,
                 "Show UI restores the application chrome while Quick Controls stays collapsed");
@@ -563,6 +589,11 @@ namespace ArkBoard
             window.SetStatus("Sample project · All images are embedded");
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Capture(window, Path.Combine(folder, "ui-board.png"));
+            MenuItem[] contextSections = window.Board.ContextMenu.Items.OfType<MenuItem>().ToArray();
+            Check(contextSections.Length == 5 && contextSections.Select(item => (string)item.Tag).SequenceEqual(new[] { "_File", "_Edit", "_View", "_Settings", "_Help" }) &&
+                contextSections[0].Items.Count == 9 && contextSections[1].Items.Count == 14 && contextSections[2].Items.Count == 7 &&
+                contextSections[3].Items.Count == 5 && contextSections[4].Items.Count == 1,
+                "The canvas context menu mirrors every top-level menu-bar section and command group");
             CaptureContextMenu(window, Path.Combine(folder, "ui-context-menu.png"));
             Point stableScreen = window.Board.ToScreen(new Point(wi[0].X, wi[0].Y));
             window.Document.Selected.Clear(); window.Document.Notify();

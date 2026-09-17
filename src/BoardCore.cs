@@ -306,7 +306,8 @@ namespace ArkBoard
             await Task.Run(() => WriteSnapshot(full, snapshot, progress));
             Path = full; if (revision == snapshot.Revision) Dirty = false; Notify();
         }
-        public void Load(string path)
+        public void Load(string path) { Load(path, null); }
+        public void Load(string path, IProgress<double> progress)
         {
             // Parse and validate separately: a damaged file must never replace the open board.
             Manifest manifest;
@@ -314,6 +315,7 @@ namespace ArkBoard
             using (FileStream file = File.OpenRead(path))
             using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Read))
             {
+                if (progress != null) progress.Report(0);
                 ZipArchiveEntry me = zip.GetEntry("manifest.json");
                 if (me == null || me.Length > 8 * 1024 * 1024) throw new InvalidDataException("Project manifest is missing or too large.");
                 using (Stream stream = me.Open()) manifest = (Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(stream);
@@ -321,6 +323,8 @@ namespace ArkBoard
                     throw new InvalidDataException("Unsupported project format or version.");
                 if (manifest.Images.Count > 10000) throw new InvalidDataException("Project contains too many images.");
                 var ids = new HashSet<string>();
+                int assetCount = Math.Max(1, manifest.Images.Where(i => i != null && !i.IsText).Select(i => i.Asset).Distinct().Count());
+                int loadedAssets = 0;
                 long total = 0;
                 foreach (ImageItem i in manifest.Images)
                 {
@@ -354,6 +358,7 @@ namespace ArkBoard
                             AssetData asset = AssetData.Create(ReadLimited(s, AssetData.MaxBytes));
                             if (asset.Key != i.Asset) throw new InvalidDataException("Image asset integrity check failed.");
                             assets.Add(i.Asset, asset);
+                            loadedAssets++; if (progress != null) progress.Report(.05 + .9 * loadedAssets / assetCount);
                         }
                     }
                     AssetData itemAsset = assets[i.Asset];
@@ -368,6 +373,12 @@ namespace ArkBoard
             PanX = Finite(manifest.PanX) && Math.Abs(manifest.PanX) < 1e9 ? manifest.PanX : 0;
             PanY = Finite(manifest.PanY) && Math.Abs(manifest.PanY) < 1e9 ? manifest.PanY : 0;
             Path = System.IO.Path.GetFullPath(path); Dirty = false; revision++; Notify();
+            if (progress != null) progress.Report(1);
+        }
+        internal void ReplaceWithLoaded(BoardDocument loaded)
+        {
+            Items = loaded.Items; Assets = loaded.Assets; Selected.Clear(); undo.Clear(); redo.Clear();
+            Zoom = loaded.Zoom; PanX = loaded.PanX; PanY = loaded.PanY; Path = loaded.Path; Dirty = false; revision++; Notify();
         }
         public static bool Finite(double n) { return !double.IsNaN(n) && !double.IsInfinity(n); }
         public static bool ValidMask(ImageItem i)

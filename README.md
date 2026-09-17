@@ -1,10 +1,16 @@
-# ArkBoard 1.14.0
+# ArkBoard 1.15.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Background loading and recent projects in 1.15.0
+
+- Project loading now runs in the background and shares the compact bottom progress indicator used by saving. The indicator remains visible when the rest of the interface is hidden.
+- **Open** opens the standard file dialog. **Open Recent** is a separate submenu in both the File menu and the canvas right-click menu, listing up to ten recent projects. Recent paths are stored locally in `%APPDATA%\ArkBoard\recent-projects.txt`.
+- The canvas right-click menu mirrors the complete **File / Edit / View / Settings / Help** menu bar, so every menu command remains available while the interface is hidden.
 
 ## Faster background saving in 1.14.0
 
@@ -135,7 +141,7 @@ Confirmed text becomes a movable canvas object and supports resizing, duplicatio
 
 ## New in 1.3.1
 
-- The toolbar has been removed to give the canvas more space. Right-click the canvas for Import Images, Open Project, Save Project, Undo, Redo, Fit All and Pack Images, along with the existing editing commands.
+- The toolbar has been removed to give the canvas more space. Right-click the canvas for Import Images, Open, Open Recent, Save Project, Undo, Redo, Fit All and Pack Images, along with the existing editing commands.
 - The context menu uses a fully dark template without the native white icon gutter. Undo/Redo reflect the available history; keyboard shortcuts are unchanged.
 
 ## Rendering improvements in 1.3
@@ -221,11 +227,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.14.0
-Start-Process .\dist-arkboard-1.14.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.14.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.15.0
+Start-Process .\dist-arkboard-1.15.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.15.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.14.0`; failures produce `FAILED.txt`. They cover atomic background saving, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, masked-edge move and scale snapping with shared padding and Ctrl override, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and configurable-gap packing. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.15.0`; failures produce `FAILED.txt`. They cover atomic background saving, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, masked-edge move and scale snapping with shared padding and Ctrl override, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection and rotation controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity, normalization and configurable-gap packing. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

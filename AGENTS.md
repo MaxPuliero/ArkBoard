@@ -22,7 +22,11 @@ ArkBoard is a portable x64 WPF application for Windows 10/11, built with the .NE
 
 Build with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -OutputDirectory dist-arkboard-X.Y.Z`. Run the executable with `--self-test test-output-arkboard-X.Y.Z`; every check must pass. Inspect generated screenshots before release. BeeRef coverage uses the embedded `assets/TestBeeRefV1.bee` and `assets/TestBeeRefV2.bee` fixtures and must continue to verify that source databases are unchanged. Package the contents of the dist folder at the ZIP root, commit, push `main`, and publish the matching GitHub release with the portable ZIP.
 
-Normal saves use `BoardDocument.SaveAsync`: capture an immutable manifest/asset snapshot on the UI thread, write it atomically on a worker task, and report byte progress to the thin bottom status-bar indicator. Already-compressed image formats use ZIP `NoCompression`; other assets use `Fastest`. If the document revision changes while writing, completion must leave `Dirty` set.
+Normal saves use `BoardDocument.SaveAsync`: capture an immutable manifest/asset snapshot on the UI thread, write it atomically on a worker task, and report byte progress to the shared bottom activity indicator. Project loading also runs on a worker task and reports through the same indicator. The indicator is an independent root overlay so it remains visible in minimal UI mode. Already-compressed image formats use ZIP `NoCompression`; other assets use `Fastest`. If the document revision changes while writing, completion must leave `Dirty` set.
+
+Keep **Open** and **Open Recent** as separate commands. Open Recent appears in both the File menu and the canvas context menu. Keep the most recent ten valid paths, most recent first, in `%APPDATA%\ArkBoard\recent-projects.txt`; tests must not read or write this user file.
+
+The canvas context menu mirrors all five top-level menu-bar sections and their commands. Keep its checkable View and Settings entries synchronized with the main menu so minimal UI mode never hides functionality.
 
 Keep the assembly version, build default directory, README version and release filename aligned. Preserve existing `.arkboard` manifests unless a feature requires a new schema version. Projects are ZIP archives with embedded source assets; PSD visibility is stored per canvas item.
 

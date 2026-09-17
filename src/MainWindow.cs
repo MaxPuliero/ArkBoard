@@ -45,21 +45,30 @@ namespace ArkBoard
         Border layersSeparator;
         string layersUiKey;
         MenuItem undoMenuItem, redoMenuItem;
-        MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
-        MenuItem topmostItem, gridItem;
-        MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
-        internal MenuItem snappingItem, paddingItem;
-        internal TextBox paddingBox;
-        TextBlock paddingLabel;
+        MenuItem topmostItem, topmostContextItem, gridItem, gridContextItem;
+        MenuItem autoSortingItem, autoSortingContextItem, invertDragZoomItem, invertDragZoomContextItem, languageMenu;
+        internal MenuItem openRecentItem;
+        internal MenuItem openRecentContextItem;
+        internal MenuItem snappingItem, snappingContextItem, paddingItem, paddingContextItem;
+        internal TextBox paddingBox, paddingContextBox;
+        TextBlock paddingLabel, paddingContextLabel;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy, saving, locked, minimalUi;
         bool testMode;
+        internal readonly List<string> recentProjects = new List<string>();
+        sealed class ProjectLoad
+        {
+            internal BoardDocument Native;
+            internal BeeImportResult Bee;
+            internal PureRefImportResult PureRef;
+        }
         readonly Brush panel = Brush("#232323");
         readonly Brush text = Brush("#ECECEC");
         readonly Brush secondary = Brush("#9B9B9B");
         public MainWindow(bool testing)
         {
             testMode = testing;
+            LoadRecentProjects();
             Title = "ArkBoard"; Width = 1280; Height = 820; MinWidth = 900; MinHeight = 600;
             using (Stream icon = typeof(MainWindow).Assembly.GetManifestResourceStream("ArkBoard.AppIcon"))
             {
@@ -145,6 +154,7 @@ namespace ArkBoard
         void SetTopmost(bool value)
         {
             Topmost = value; topmostItem.IsChecked = value;
+            if (topmostContextItem != null) topmostContextItem.IsChecked = value;
             if (topmostButton != null) topmostButton.Background = value ? Brush("#555555") : Brush("#323232");
             if (lockControlsWindow != null) lockControlsWindow.Sync(opacitySlider.Value, value);
         }
@@ -274,17 +284,17 @@ namespace ArkBoard
         { return new MenuItem { Header = Localization.T(title), Tag = title }; }
         void AddLanguage(MenuItem parent, string title, UiLanguage language)
         {
-            MenuItem item = new MenuItem { Header = title, IsCheckable = true, IsChecked = Localization.Current == language };
+            MenuItem item = new MenuItem { Header = title, IsCheckable = true, IsChecked = Localization.Current == language, DataContext = language };
             item.Click += delegate { SetLanguage(language); };
             languageItems.Add(item); parent.Items.Add(item);
         }
         internal void SetLanguage(UiLanguage language)
         {
             Localization.Current = language;
-            for (int i = 0; i < languageItems.Count; i++) languageItems[i].IsChecked = i == (int)language;
+            for (int i = 0; i < languageItems.Count; i++) languageItems[i].IsChecked = (UiLanguage)languageItems[i].DataContext == language;
             LocalizeTree(Root);
             if (Board.ContextMenu != null) LocalizeTree(Board.ContextMenu);
-            RefreshPaddingMenu();
+            RefreshPaddingMenu(); RefreshRecentMenu();
             layersUiKey = null; Refresh(); Board.InvalidateVisual();
             SetStatus(language == UiLanguage.Italian ? "Lingua impostata su Italiano" : language == UiLanguage.Japanese ? "表示言語を日本語に変更しました" : "Language set to English");
         }
@@ -314,8 +324,11 @@ namespace ArkBoard
             bar.Children.Add(brand);
             Menu menu = new Menu(); bar.Children.Add(menu);
             MenuItem file = MenuHeader("_File"); menu.Items.Add(file);
-            file.Items.Add(MenuAction("New Project", "Ctrl+N", NewProject));
-            file.Items.Add(MenuAction("Open Project...", "Ctrl+O", OpenDialog));
+            file.Items.Add(MenuAction("New", "Ctrl+N", NewProject));
+            file.Items.Add(MenuAction("Open...", "Ctrl+O", OpenDialog));
+            openRecentItem = MenuHeader("Open Recent");
+            openRecentItem.SubmenuOpened += delegate { RefreshRecentMenu(); };
+            file.Items.Add(openRecentItem); RefreshRecentMenu();
             file.Items.Add(MenuAction("Save", "Ctrl+S", () => BeginSave(false)));
             file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => BeginSave(true)));
             file.Items.Add(MenuSeparator());
@@ -344,27 +357,25 @@ namespace ArkBoard
             showUiItem = MenuHeader("Show UI"); showUiItem.IsCheckable = true; showUiItem.IsChecked = true; showUiItem.InputGestureText = "Tab";
             showUiItem.Click += delegate { SetMinimalUi(!showUiItem.IsChecked); }; view.Items.Add(showUiItem);
             gridItem = MenuHeader("Grid"); gridItem.IsCheckable = true; gridItem.IsChecked = true;
-            gridItem.Click += delegate { Board.ShowGrid = gridItem.IsChecked; Board.InvalidateVisual(); }; view.Items.Add(gridItem);
+            gridItem.Click += delegate { SetGrid(gridItem.IsChecked); }; view.Items.Add(gridItem);
             topmostItem = MenuHeader("Always on Top"); topmostItem.IsCheckable = true;
             topmostItem.Click += delegate { SetTopmost(topmostItem.IsChecked); }; view.Items.Add(topmostItem);
             MenuItem settings = MenuHeader("_Settings"); menu.Items.Add(settings);
             autoSortingItem = MenuHeader("Auto-Sorting"); autoSortingItem.IsCheckable = true; autoSortingItem.IsChecked = true;
             autoSortingItem.Click += delegate
             {
-                Board.AutoSorting = autoSortingItem.IsChecked;
-                SetStatus("Auto-sorting " + (Board.AutoSorting ? "enabled" : "disabled"));
+                SetAutoSorting(autoSortingItem.IsChecked);
             };
             settings.Items.Add(autoSortingItem);
             snappingItem = MenuHeader("Snapping"); snappingItem.IsCheckable = true;
             snappingItem.Click += delegate
             {
-                Board.Snapping = snappingItem.IsChecked;
-                SetStatus(Board.Snapping ? "Snapping enabled" : "Snapping disabled");
+                SetSnapping(snappingItem.IsChecked);
             };
             settings.Items.Add(snappingItem);
             paddingItem = BuildPaddingSetting(); settings.Items.Add(paddingItem); RefreshPaddingMenu();
             invertDragZoomItem = MenuHeader("Invert Zoom"); invertDragZoomItem.IsCheckable = true;
-            invertDragZoomItem.Click += delegate { Board.InvertDragZoom = invertDragZoomItem.IsChecked; };
+            invertDragZoomItem.Click += delegate { SetInvertZoom(invertDragZoomItem.IsChecked); };
             settings.Items.Add(invertDragZoomItem);
             languageMenu = MenuHeader("Language"); settings.Items.Add(languageMenu);
             AddLanguage(languageMenu, "English", UiLanguage.English);
@@ -536,13 +547,16 @@ namespace ArkBoard
             opacitySlider.ValueChanged += delegate { ApplyWindowOpacity(); };
             status = Label("Ready · Drop an image to get started", 12, secondary); status.TextWrapping = TextWrapping.NoWrap; status.TextTrimming = TextTrimming.CharacterEllipsis;
             status.Margin = new Thickness(20, 0, 14, 0); status.VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(status);
-            saveProgress = new ProgressBar { Minimum = 0, Maximum = 100, Height = 3, VerticalAlignment = VerticalAlignment.Bottom,
-                Visibility = Visibility.Collapsed, IsHitTestVisible = false, Foreground = Brush("#D0D0D0"), Background = Brush("#353535"), BorderThickness = new Thickness(0) };
+            saveProgress = new ProgressBar { Minimum = 0, Maximum = 100, Width = 225, Height = 10,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 20),
+                Visibility = Visibility.Collapsed, IsHitTestVisible = false, Foreground = Brush("#88968B"), Background = Brush("#181818"), BorderThickness = new Thickness(0) };
             saveProgress.Template = (ControlTemplate)XamlReader.Parse(@"
 <ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ProgressBar'>
- <Grid Background='{TemplateBinding Background}'><Border x:Name='PART_Indicator' Background='{TemplateBinding Foreground}' HorizontalAlignment='Left'/></Grid>
+ <Border Background='{TemplateBinding Background}' BorderBrush='#555555' BorderThickness='1' Padding='2'>
+  <Grid x:Name='PART_Track'><Border x:Name='PART_Indicator' Background='{TemplateBinding Foreground}' HorizontalAlignment='Left'/></Grid>
+ </Border>
 </ControlTemplate>");
-            Panel.SetZIndex(saveProgress, 2); holder.Children.Add(saveProgress);
+            Grid.SetRowSpan(saveProgress, 3); Panel.SetZIndex(saveProgress, 50); Root.Children.Add(saveProgress);
         }
         internal void SetWindowOpacity(double percent)
         {
@@ -563,29 +577,87 @@ namespace ArkBoard
         void BuildContextMenu()
         {
             ContextMenu menu = new ContextMenu { Resources = Resources };
-            menu.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
-            menu.Items.Add(MenuAction("Add Text", "Ctrl+T", ActivateTextTool));
-            menu.Items.Add(MenuAction("Open Project...", "Ctrl+O", OpenDialog));
-            menu.Items.Add(MenuAction("Save Project", "Ctrl+S", () => BeginSave(false)));
-            menu.Items.Add(MenuSeparator());
+
+            MenuItem file = MenuHeader("_File"); menu.Items.Add(file);
+            file.Items.Add(MenuAction("New", "Ctrl+N", NewProject));
+            file.Items.Add(MenuAction("Open...", "Ctrl+O", OpenDialog));
+            openRecentContextItem = MenuHeader("Open Recent");
+            openRecentContextItem.SubmenuOpened += delegate { RefreshRecentMenu(); };
+            file.Items.Add(openRecentContextItem); RefreshRecentMenu();
+            file.Items.Add(MenuAction("Save", "Ctrl+S", () => BeginSave(false)));
+            file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => BeginSave(true)));
+            file.Items.Add(MenuSeparator());
+            file.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
+            file.Items.Add(MenuSeparator()); file.Items.Add(MenuAction("Exit", "Alt+F4", Close));
+
+            MenuItem edit = MenuHeader("_Edit"); menu.Items.Add(edit);
             undoMenuItem = MenuAction("Undo", "Ctrl+Z", Document.Undo);
             redoMenuItem = MenuAction("Redo", "Ctrl+Y", Document.Redo);
-            menu.Items.Add(undoMenuItem); menu.Items.Add(redoMenuItem);
-            menu.Items.Add(MenuSeparator());
-            menu.Items.Add(MenuAction("Paste", "Ctrl+V", Paste)); menu.Items.Add(MenuSeparator());
-            menu.Items.Add(MenuAction("Duplicate", "Ctrl+D", Duplicate));
-            menu.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
-            menu.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
-            menu.Items.Add(MenuAction("Reset Scale", "Alt+S", ResetSize));
-            menu.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
-            flipXContextItem = MenuAction("Flip Horizontally", "H", () => Flip(true)); menu.Items.Add(flipXContextItem);
-            flipYContextItem = MenuAction("Flip Vertically", "V", () => Flip(false)); menu.Items.Add(flipYContextItem);
-            rotateContextItem = MenuAction("Rotate 90°", "", () => Rotate(90)); menu.Items.Add(rotateContextItem);
-            resetRotationContextItem = MenuAction("Reset Rotation", "Alt+R", ResetRotation); menu.Items.Add(resetRotationContextItem);
-            menu.Items.Add(MenuAction("Delete", "Del", DeleteSelection)); menu.Items.Add(MenuSeparator());
-            menu.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
-            showUiContextItem = MenuAction("Show UI", "Tab", () => SetMinimalUi(false)); menu.Items.Add(showUiContextItem);
+            edit.Items.Add(undoMenuItem); edit.Items.Add(redoMenuItem);
+            edit.Items.Add(MenuSeparator());
+            edit.Items.Add(MenuAction("Copy Image", "Ctrl+C", CopyImage));
+            edit.Items.Add(MenuAction("Paste", "Ctrl+V", Paste));
+            edit.Items.Add(MenuAction("Duplicate Selection", "Ctrl+D", Duplicate));
+            edit.Items.Add(MenuAction("Select / Deselect All", "A", ToggleSelectAll));
+            edit.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
+            edit.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
+            edit.Items.Add(MenuSeparator());
+            edit.Items.Add(MenuAction("Reset Scale", "Alt+S", ResetSize));
+            edit.Items.Add(MenuAction("Reset Rotation", "Alt+R", ResetRotation));
+            edit.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
+            edit.Items.Add(MenuAction("Delete Selection", "Del", DeleteSelection));
+            MenuItem view = MenuHeader("_View"); menu.Items.Add(view);
+            view.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
+            view.Items.Add(MenuAction("Fit Selection", "Shift+F", () => Board.Fit(true)));
+            view.Items.Add(MenuAction("Zoom 100%", "1", () => Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1)));
+            view.Items.Add(MenuAction("Opacity 100%", "Ctrl+Shift+0", () => SetWindowOpacity(100)));
+            showUiContextItem = MenuHeader("Show UI"); showUiContextItem.IsCheckable = true; showUiContextItem.IsChecked = !minimalUi;
+            showUiContextItem.InputGestureText = "Tab";
+            showUiContextItem.Click += delegate { SetMinimalUi(!showUiContextItem.IsChecked); }; view.Items.Add(showUiContextItem);
+            gridContextItem = MenuHeader("Grid"); gridContextItem.IsCheckable = true; gridContextItem.IsChecked = Board.ShowGrid;
+            gridContextItem.Click += delegate { SetGrid(gridContextItem.IsChecked); }; view.Items.Add(gridContextItem);
+            topmostContextItem = MenuHeader("Always on Top"); topmostContextItem.IsCheckable = true; topmostContextItem.IsChecked = Topmost;
+            topmostContextItem.Click += delegate { SetTopmost(topmostContextItem.IsChecked); }; view.Items.Add(topmostContextItem);
+
+            MenuItem settings = MenuHeader("_Settings"); menu.Items.Add(settings);
+            autoSortingContextItem = MenuHeader("Auto-Sorting"); autoSortingContextItem.IsCheckable = true; autoSortingContextItem.IsChecked = Board.AutoSorting;
+            autoSortingContextItem.Click += delegate { SetAutoSorting(autoSortingContextItem.IsChecked); }; settings.Items.Add(autoSortingContextItem);
+            snappingContextItem = MenuHeader("Snapping"); snappingContextItem.IsCheckable = true; snappingContextItem.IsChecked = Board.Snapping;
+            snappingContextItem.Click += delegate { SetSnapping(snappingContextItem.IsChecked); }; settings.Items.Add(snappingContextItem);
+            paddingContextItem = BuildPaddingSetting(true); settings.Items.Add(paddingContextItem);
+            invertDragZoomContextItem = MenuHeader("Invert Zoom"); invertDragZoomContextItem.IsCheckable = true; invertDragZoomContextItem.IsChecked = Board.InvertDragZoom;
+            invertDragZoomContextItem.Click += delegate { SetInvertZoom(invertDragZoomContextItem.IsChecked); }; settings.Items.Add(invertDragZoomContextItem);
+            MenuItem contextLanguage = MenuHeader("Language"); settings.Items.Add(contextLanguage);
+            AddLanguage(contextLanguage, "English", UiLanguage.English);
+            AddLanguage(contextLanguage, "Italiano", UiLanguage.Italian);
+            AddLanguage(contextLanguage, "日本語", UiLanguage.Japanese);
+
+            MenuItem help = MenuHeader("_Help"); menu.Items.Add(help);
+            help.Items.Add(MenuAction("About ArkBoard", "", Help));
             Board.ContextMenu = menu;
+        }
+        void SetGrid(bool value)
+        {
+            Board.ShowGrid = value; gridItem.IsChecked = value;
+            if (gridContextItem != null) gridContextItem.IsChecked = value;
+            Board.InvalidateVisual();
+        }
+        void SetAutoSorting(bool value)
+        {
+            Board.AutoSorting = value; autoSortingItem.IsChecked = value;
+            if (autoSortingContextItem != null) autoSortingContextItem.IsChecked = value;
+            SetStatus("Auto-sorting " + (value ? "enabled" : "disabled"));
+        }
+        void SetSnapping(bool value)
+        {
+            Board.Snapping = value; snappingItem.IsChecked = value;
+            if (snappingContextItem != null) snappingContextItem.IsChecked = value;
+            SetStatus(value ? "Snapping enabled" : "Snapping disabled");
+        }
+        void SetInvertZoom(bool value)
+        {
+            Board.InvertDragZoom = value; invertDragZoomItem.IsChecked = value;
+            if (invertDragZoomContextItem != null) invertDragZoomContextItem.IsChecked = value;
         }
         internal bool MinimalUi { get { return minimalUi; } }
         internal void SetMinimalUi(bool value)
@@ -598,7 +670,7 @@ namespace ArkBoard
             quickControlsExpander.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
             textToolButton.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
             if (showUiItem != null) showUiItem.IsChecked = !value;
-            if (showUiContextItem != null) showUiContextItem.IsEnabled = value;
+            if (showUiContextItem != null) showUiContextItem.IsChecked = !value;
             SetStatus(value ? "UI hidden · Press Tab or right-click to show it" : "UI shown");
             Board.Focus();
         }
@@ -616,8 +688,6 @@ namespace ArkBoard
             flipSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             removeMaskButton.Visibility = anyMasks ? Visibility.Visible : Visibility.Collapsed;
             RefreshPsdLayers(items);
-            foreach (MenuItem item in new[] { flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem })
-                item.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             Visibility panelVisibility = any ? Visibility.Visible : Visibility.Collapsed;
             if (inspector.Visibility != panelVisibility || inspectorColumn.Width.Value != (any ? 360 : 0))
             {
@@ -817,7 +887,9 @@ namespace ArkBoard
         void RefreshPaddingMenu()
         {
             if (paddingLabel != null) paddingLabel.Text = Localization.T("Image Padding");
+            if (paddingContextLabel != null) paddingContextLabel.Text = Localization.T("Image Padding");
             if (paddingBox != null) paddingBox.Text = Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture);
+            if (paddingContextBox != null) paddingContextBox.Text = Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture);
         }
         internal bool SetImagePadding(double value)
         {
@@ -826,7 +898,7 @@ namespace ArkBoard
             status.Text = Localization.T("Image Padding") + ": " + Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture) + " px";
             return true;
         }
-        MenuItem BuildPaddingSetting()
+        MenuItem BuildPaddingSetting(bool context = false)
         {
             var item = new MenuItem { StaysOpenOnClick = true };
             var row = new Grid { Width = 270 };
@@ -834,45 +906,101 @@ namespace ArkBoard
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(68) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
-            paddingLabel = new TextBlock { Text = Localization.T("Image Padding"), Tag = "Image Padding", VerticalAlignment = VerticalAlignment.Center };
-            row.Children.Add(paddingLabel);
-            Button down = PaddingArrow("◀", -1); Grid.SetColumn(down, 1); row.Children.Add(down);
+            var label = new TextBlock { Text = Localization.T("Image Padding"), Tag = "Image Padding", VerticalAlignment = VerticalAlignment.Center };
+            if (context) paddingContextLabel = label; else paddingLabel = label;
+            row.Children.Add(label);
             var field = new Grid { Margin = new Thickness(2, 0, 2, 0) }; Grid.SetColumn(field, 2);
-            paddingBox = new TextBox { Text = "4", TextAlignment = TextAlignment.Right, Padding = new Thickness(4, 3, 23, 3),
+            var box = new TextBox { Text = "4", TextAlignment = TextAlignment.Right, Padding = new Thickness(4, 3, 23, 3),
                 VerticalContentAlignment = VerticalAlignment.Center };
-            paddingBox.PreviewKeyDown += delegate(object sender, KeyEventArgs e)
+            if (context) paddingContextBox = box; else paddingBox = box;
+            box.PreviewKeyDown += delegate(object sender, KeyEventArgs e)
             {
-                if (e.Key == Key.Enter) { CommitPaddingText(); e.Handled = true; }
-                else if (e.Key == Key.Up) { AdjustImagePadding(1); e.Handled = true; }
-                else if (e.Key == Key.Down) { AdjustImagePadding(-1); e.Handled = true; }
+                if (e.Key == Key.Enter) { CommitPaddingText(box); e.Handled = true; }
+                else if (e.Key == Key.Up) { AdjustImagePadding(1, box); e.Handled = true; }
+                else if (e.Key == Key.Down) { AdjustImagePadding(-1, box); e.Handled = true; }
             };
-            paddingBox.LostKeyboardFocus += delegate { CommitPaddingText(); };
-            field.Children.Add(paddingBox);
+            box.LostKeyboardFocus += delegate { CommitPaddingText(box); };
+            field.Children.Add(box);
             field.Children.Add(new TextBlock { Text = "px", Foreground = secondary, HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), IsHitTestVisible = false });
             row.Children.Add(field);
-            Button up = PaddingArrow("▶", 1); Grid.SetColumn(up, 3); row.Children.Add(up);
+            Button down = PaddingArrow("◀", -1, box); Grid.SetColumn(down, 1); row.Children.Add(down);
+            Button up = PaddingArrow("▶", 1, box); Grid.SetColumn(up, 3); row.Children.Add(up);
             item.Header = row; return item;
         }
-        Button PaddingArrow(string glyph, double delta)
+        Button PaddingArrow(string glyph, double delta, TextBox target)
         {
             var button = new Button { Content = glyph, Width = 22, MinWidth = 0, Height = 24, Padding = new Thickness(0),
                 Margin = new Thickness(1, 0, 1, 0), BorderThickness = new Thickness(0), Background = Brushes.Transparent,
                 Foreground = secondary, ToolTip = delta < 0 ? "-1 px" : "+1 px" };
-            button.Click += delegate { AdjustImagePadding(delta); };
+            button.Click += delegate { AdjustImagePadding(delta, target); };
             return button;
         }
-        void AdjustImagePadding(double delta)
+        void AdjustImagePadding(double delta, TextBox target)
         {
             SetImagePadding(Math.Max(0, Math.Min(10000, Board.ImagePadding + delta)));
-            if (paddingBox != null) { paddingBox.Focus(); paddingBox.SelectAll(); }
+            if (target != null) { target.Focus(); target.SelectAll(); }
         }
-        void CommitPaddingText()
+        void CommitPaddingText(TextBox box)
         {
-            if (paddingBox == null) return;
+            if (box == null) return;
             double value;
-            if (!Number(paddingBox.Text, out value) || !SetImagePadding(value))
+            if (!Number(box.Text, out value) || !SetImagePadding(value))
             { SetStatus("Enter a value from 0 to 10,000 pixels."); RefreshPaddingMenu(); }
+        }
+        static string RecentProjectsPath
+        { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArkBoard", "recent-projects.txt"); } }
+        void LoadRecentProjects()
+        {
+            if (testMode) return;
+            try
+            {
+                if (!File.Exists(RecentProjectsPath)) return;
+                foreach (string path in File.ReadAllLines(RecentProjectsPath).Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p)))
+                    if (!recentProjects.Contains(path, StringComparer.OrdinalIgnoreCase)) recentProjects.Add(path);
+                if (recentProjects.Count > 10) recentProjects.RemoveRange(10, recentProjects.Count - 10);
+            }
+            catch { recentProjects.Clear(); }
+        }
+        void SaveRecentProjects()
+        {
+            if (testMode) return;
+            try
+            {
+                string folder = Path.GetDirectoryName(RecentProjectsPath); Directory.CreateDirectory(folder);
+                File.WriteAllLines(RecentProjectsPath, recentProjects);
+            }
+            catch { }
+        }
+        internal void AddRecentProject(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            string full; try { full = Path.GetFullPath(path); } catch { return; }
+            recentProjects.RemoveAll(item => string.Equals(item, full, StringComparison.OrdinalIgnoreCase));
+            recentProjects.Insert(0, full);
+            if (recentProjects.Count > 10) recentProjects.RemoveRange(10, recentProjects.Count - 10);
+            SaveRecentProjects(); RefreshRecentMenu();
+        }
+        void PopulateRecentMenu(MenuItem menu)
+        {
+            if (menu == null) return;
+            menu.Items.Clear();
+            foreach (string path in recentProjects)
+            {
+                string recentPath = path;
+                var item = new MenuItem { Header = Path.GetFileName(path), ToolTip = path };
+                item.Click += delegate { BeginOpenProject(recentPath); };
+                menu.Items.Add(item);
+            }
+            if (menu.Items.Count == 0)
+                menu.Items.Add(new MenuItem { Header = Localization.T("No recent projects"), Tag = "No recent projects", IsEnabled = false });
+        }
+        internal void RefreshRecentMenu()
+        {
+            bool removed = recentProjects.RemoveAll(path => !File.Exists(path)) > 0;
+            PopulateRecentMenu(openRecentItem);
+            PopulateRecentMenu(openRecentContextItem);
+            if (removed) SaveRecentProjects();
         }
         bool ConfirmDiscard()
         {
@@ -882,11 +1010,11 @@ namespace ArkBoard
             bool? result = DarkDialog.ConfirmSave(this);
             return result == false || (result == true && Save(false));
         }
-        void NewProject() { if (ConfirmDiscard()) { Board.FinishGesture(); Document.Reset(); SetStatus("New Project"); } }
+        void NewProject() { if (ConfirmDiscard()) { Board.FinishGesture(); Document.Reset(); SetStatus(Localization.T("New")); } }
         void OpenDialog()
         {
-            var dialog = new OpenFileDialog { Title = "Open Project", Filter = "ArkBoard, BeeRef and PureRef legacy projects|*.arkboard;*.refcanvas;*.zip;*.bee;*.pur|All files|*.*" };
-            if (dialog.ShowDialog(this) == true) OpenProject(dialog.FileName);
+            var dialog = new OpenFileDialog { Title = Localization.T("Open..."), Filter = "ArkBoard, BeeRef and PureRef legacy projects|*.arkboard;*.refcanvas;*.zip;*.bee;*.pur|All files|*.*" };
+            if (dialog.ShowDialog(this) == true) BeginOpenProject(dialog.FileName);
         }
         public void OpenProject(string path)
         {
@@ -912,6 +1040,7 @@ namespace ArkBoard
                     status.Text = message;
                 }
                 else { Document.Load(path); SetStatus("Project opened · All images are embedded"); }
+                AddRecentProject(path);
             }
             catch (Exception ex) { Error("Unable to open project", ex); }
             finally { Mouse.OverrideCursor = null; }
@@ -920,9 +1049,44 @@ namespace ArkBoard
         {
             CommitText();
             string path; if (!TrySavePath(saveAs, out path)) return false;
-            try { Mouse.OverrideCursor = Cursors.Wait; Document.Save(path); SetStatus("Saved · Images embedded in the project"); return true; }
+            try { Mouse.OverrideCursor = Cursors.Wait; Document.Save(path); AddRecentProject(path); SetStatus("Saved · Images embedded in the project"); return true; }
             catch (Exception ex) { Error("Unable to save project", ex); return false; }
             finally { Mouse.OverrideCursor = null; }
+        }
+        async void BeginOpenProject(string path) { await OpenProjectInBackground(path); }
+        internal async Task<bool> OpenProjectInBackground(string path)
+        {
+            if (busy || saving || string.IsNullOrWhiteSpace(path) || !ConfirmDiscard()) return false;
+            busy = true; Board.FinishGesture(); Board.IsEnabled = false; ShowActivity("Loading project...", 2);
+            IProgress<double> progress = new Progress<double>(value => saveProgress.Value = Math.Max(0, Math.Min(100, value * 100)));
+            try
+            {
+                ProjectLoad loaded = await Task.Run(() =>
+                {
+                    if (BeeImporter.IsBeeFile(path)) { progress.Report(.1); return new ProjectLoad { Bee = BeeImporter.Load(path) }; }
+                    if (PureRefImporter.IsPureRefFile(path)) { progress.Report(.1); return new ProjectLoad { PureRef = PureRefImporter.Load(path) }; }
+                    var native = new BoardDocument(); native.Load(path, progress); return new ProjectLoad { Native = native };
+                });
+                if (loaded.Bee != null)
+                {
+                    Document.ReplaceWithImported(loaded.Bee.Items, loaded.Bee.Assets); Board.Fit(false);
+                    string message = Localization.T("BeeRef project imported") + " · " + loaded.Bee.Items.Count + " " + Localization.T("objects");
+                    if (loaded.Bee.SkippedItems > 0) message += " · " + loaded.Bee.SkippedItems + " " + Localization.T("skipped");
+                    if (loaded.Bee.IgnoredEffects > 0) message += " · " + loaded.Bee.IgnoredEffects + " " + Localization.T("effects ignored");
+                    status.Text = message;
+                }
+                else if (loaded.PureRef != null)
+                {
+                    Document.ReplaceWithImported(loaded.PureRef.Items, loaded.PureRef.Assets); Board.Fit(false);
+                    string message = "PureRef legacy project imported · " + loaded.PureRef.Items.Count + " " + Localization.T("objects");
+                    if (loaded.PureRef.SkippedItems > 0) message += " · " + loaded.PureRef.SkippedItems + " " + Localization.T("skipped");
+                    status.Text = message;
+                }
+                else { Document.ReplaceWithLoaded(loaded.Native); SetStatus("Project opened · All images are embedded"); }
+                AddRecentProject(path); saveProgress.Value = 100; return true;
+            }
+            catch (Exception ex) { Error("Unable to open project", ex); return false; }
+            finally { busy = false; Board.IsEnabled = true; HideActivity(); Board.Focus(); }
         }
         bool TrySavePath(bool saveAs, out string path)
         {
@@ -943,18 +1107,21 @@ namespace ArkBoard
         internal async Task<bool> SaveInBackground(string path)
         {
             if (saving || string.IsNullOrWhiteSpace(path)) return false;
-            saving = true; saveProgress.Value = 0; saveProgress.Visibility = Visibility.Visible;
-            SetStatus("Saving project...");
+            saving = true; ShowActivity("Saving project...", 0);
             var progress = new Progress<double>(value => saveProgress.Value = Math.Max(0, Math.Min(100, value * 100)));
             try
             {
                 await Document.SaveAsync(path, progress);
+                AddRecentProject(path);
                 SetStatus(Document.Dirty ? "Saved snapshot · New changes remain unsaved" : "Saved · Images embedded in the project");
                 return true;
             }
             catch (Exception ex) { Error("Unable to save project", ex); return false; }
-            finally { saving = false; saveProgress.Visibility = Visibility.Collapsed; }
+            finally { saving = false; HideActivity(); }
         }
+        void ShowActivity(string message, double percent)
+        { saveProgress.Value = percent; saveProgress.Visibility = Visibility.Visible; SetStatus(message); }
+        void HideActivity() { saveProgress.Visibility = Visibility.Collapsed; }
         async void ImportDialog()
         {
             var dialog = new OpenFileDialog { Title = "Import Images", Multiselect = true,
@@ -972,7 +1139,7 @@ namespace ArkBoard
                 Point center = Board.ToWorld(e.GetPosition(Board));
                 var sources = Importer.Extract(e.Data);
                 if (sources.Count == 1 && IsProjectPath(sources[0].Location))
-                    OpenProject(sources[0].Location);
+                    BeginOpenProject(sources[0].Location);
                 else await ImportSources(sources, center);
             }
             catch (Exception ex) { Error("Import failed", ex); }
@@ -1118,11 +1285,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.14.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.15.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.14.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.15.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.14.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.15.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

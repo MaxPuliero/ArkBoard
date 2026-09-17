@@ -15,8 +15,10 @@ namespace ArkBoard
             { "_View", new[]{ "_View", "_Visualizza", "表示(_V)" } },
             { "_Settings", new[]{ "_Settings", "_Impostazioni", "設定(_S)" } },
             { "_Help", new[]{ "_Help", "_Aiuto", "ヘルプ(_H)" } },
-            { "New Project", new[]{ "New Project", "Nuovo progetto", "新規プロジェクト" } },
-            { "Open Project...", new[]{ "Open Project...", "Apri progetto...", "プロジェクトを開く..." } },
+            { "New", new[]{ "New", "Nuovo", "新規" } },
+            { "Open...", new[]{ "Open...", "Apri...", "開く..." } },
+            { "Open Recent", new[]{ "Open Recent", "Apri recenti", "最近使ったプロジェクト" } },
+            { "No recent projects", new[]{ "No recent projects", "Nessun progetto recente", "最近のプロジェクトはありません" } },
             { "Save", new[]{ "Save", "Salva", "保存" } },
             { "Save As...", new[]{ "Save As...", "Salva con nome...", "名前を付けて保存..." } },
             { "Save Project", new[]{ "Save Project", "Salva progetto", "プロジェクトを保存" } },
@@ -127,6 +129,7 @@ namespace ArkBoard
             ,{ "effects ignored", new[]{ "effects ignored", "effetti non importati", "未対応エフェクト" } }
             ,{ "Saved · Images embedded in the project", new[]{ "Saved · Images embedded in the project", "Salvato · Immagini incorporate nel progetto", "保存しました · 画像はプロジェクトに埋め込み済み" } }
             ,{ "Saving project...", new[]{ "Saving project...", "Salvataggio del progetto...", "プロジェクトを保存中..." } }
+            ,{ "Loading project...", new[]{ "Loading project...", "Apertura del progetto...", "プロジェクトを読み込み中..." } }
             ,{ "Saved snapshot · New changes remain unsaved", new[]{ "Saved snapshot · New changes remain unsaved", "Istantanea salvata · Le nuove modifiche non sono ancora salvate", "スナップショットを保存 · 新しい変更は未保存です" } }
             ,{ "Image pasted", new[]{ "Image pasted", "Immagine incollata", "画像を貼り付けました" } }
             ,{ "Masked image pasted", new[]{ "Masked image pasted", "Immagine mascherata incollata", "マスク画像を貼り付けました" } }
