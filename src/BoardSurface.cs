@@ -16,6 +16,7 @@ namespace ArkBoard
         public bool ShowGrid = true;
         public bool AutoSorting = true;
         public bool Snapping;
+        public double ImagePadding = 16;
         public bool InvertDragZoom;
         public bool SpaceDown;
         internal bool ShiftPreview;
@@ -283,7 +284,7 @@ namespace ArkBoard
             return result;
         }
         internal static Vector CalculateMoveSnap(IEnumerable<ImageItem> movingBases, IEnumerable<ImageItem> targets,
-            Vector rawDelta, double threshold, out List<Tuple<Point, Point>> guides)
+            Vector rawDelta, double threshold, double padding, out List<Tuple<Point, Point>> guides)
         {
             guides = new List<Tuple<Point, Point>>();
             Rect source = VisibleBounds(movingBases);
@@ -294,24 +295,26 @@ namespace ArkBoard
             foreach (ImageItem target in targets.Where(i => !i.IsText))
             {
                 Rect bounds = VisibleWorldBounds(target);
-                foreach (double sourceEdge in new[] { source.Left, source.Right })
-                    foreach (double targetEdge in new[] { bounds.Left, bounds.Right })
+                foreach (double[] edges in new[] { new[] { source.Left, bounds.Left }, new[] { source.Right, bounds.Right },
+                    new[] { source.Right, bounds.Left - padding }, new[] { source.Left, bounds.Right + padding } })
                     {
-                        double distance = targetEdge - sourceEdge;
+                        double sourceEdge = edges[0], destination = edges[1];
+                        double distance = destination - sourceEdge;
                         if (Math.Abs(distance) <= threshold && Math.Abs(distance) < bestX)
                         {
                             bestX = Math.Abs(distance); correctionX = distance;
-                            guideX = Tuple.Create(new Point(targetEdge, source.Top), new Point(targetEdge, source.Bottom));
+                            guideX = Tuple.Create(new Point(destination, source.Top), new Point(destination, source.Bottom));
                         }
                     }
-                foreach (double sourceEdge in new[] { source.Top, source.Bottom })
-                    foreach (double targetEdge in new[] { bounds.Top, bounds.Bottom })
+                foreach (double[] edges in new[] { new[] { source.Top, bounds.Top }, new[] { source.Bottom, bounds.Bottom },
+                    new[] { source.Bottom, bounds.Top - padding }, new[] { source.Top, bounds.Bottom + padding } })
                     {
-                        double distance = targetEdge - sourceEdge;
+                        double sourceEdge = edges[0], destination = edges[1];
+                        double distance = destination - sourceEdge;
                         if (Math.Abs(distance) <= threshold && Math.Abs(distance) < bestY)
                         {
                             bestY = Math.Abs(distance); correctionY = distance;
-                            guideY = Tuple.Create(new Point(source.Left, targetEdge), new Point(source.Right, targetEdge));
+                            guideY = Tuple.Create(new Point(source.Left, destination), new Point(source.Right, destination));
                         }
                     }
             }
@@ -320,7 +323,8 @@ namespace ArkBoard
             return rawDelta + new Vector(correctionX, correctionY);
         }
         internal static double CalculateScaleSnap(Rect source, IEnumerable<ImageItem> targets, Point fixedAnchor,
-            double rawFactor, double minimum, double maximum, double threshold, out List<Tuple<Point, Point>> guides)
+            double rawFactor, double minimum, double maximum, double threshold, double padding,
+            out List<Tuple<Point, Point>> guides)
         {
             guides = new List<Tuple<Point, Point>>();
             double best = threshold + 1, result = rawFactor;
@@ -328,42 +332,40 @@ namespace ArkBoard
             foreach (ImageItem target in targets.Where(i => !i.IsText))
             {
                 Rect bounds = VisibleWorldBounds(target);
-                foreach (double sourceEdge in new[] { source.Left, source.Right })
+                foreach (double[] edges in new[] { new[] { source.Left, bounds.Left }, new[] { source.Right, bounds.Right },
+                    new[] { source.Right, bounds.Left - padding }, new[] { source.Left, bounds.Right + padding } })
                 {
+                    double sourceEdge = edges[0], destination = edges[1];
                     double basis = sourceEdge - fixedAnchor.X;
                     if (Math.Abs(basis) < .000001) continue;
                     double current = fixedAnchor.X + basis * rawFactor;
-                    foreach (double targetEdge in new[] { bounds.Left, bounds.Right })
+                    double distance = Math.Abs(destination - current);
+                    double candidate = (destination - fixedAnchor.X) / basis;
+                    if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
                     {
-                        double distance = Math.Abs(targetEdge - current);
-                        double candidate = (targetEdge - fixedAnchor.X) / basis;
-                        if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
-                        {
-                            best = distance; result = candidate;
-                            double scaledTop = fixedAnchor.Y + (source.Top - fixedAnchor.Y) * candidate;
-                            double scaledBottom = fixedAnchor.Y + (source.Bottom - fixedAnchor.Y) * candidate;
-                            bestGuide = Tuple.Create(new Point(targetEdge, Math.Min(scaledTop, scaledBottom)),
-                                new Point(targetEdge, Math.Max(scaledTop, scaledBottom)));
-                        }
+                        best = distance; result = candidate;
+                        double scaledTop = fixedAnchor.Y + (source.Top - fixedAnchor.Y) * candidate;
+                        double scaledBottom = fixedAnchor.Y + (source.Bottom - fixedAnchor.Y) * candidate;
+                        bestGuide = Tuple.Create(new Point(destination, Math.Min(scaledTop, scaledBottom)),
+                            new Point(destination, Math.Max(scaledTop, scaledBottom)));
                     }
                 }
-                foreach (double sourceEdge in new[] { source.Top, source.Bottom })
+                foreach (double[] edges in new[] { new[] { source.Top, bounds.Top }, new[] { source.Bottom, bounds.Bottom },
+                    new[] { source.Bottom, bounds.Top - padding }, new[] { source.Top, bounds.Bottom + padding } })
                 {
+                    double sourceEdge = edges[0], destination = edges[1];
                     double basis = sourceEdge - fixedAnchor.Y;
                     if (Math.Abs(basis) < .000001) continue;
                     double current = fixedAnchor.Y + basis * rawFactor;
-                    foreach (double targetEdge in new[] { bounds.Top, bounds.Bottom })
+                    double distance = Math.Abs(destination - current);
+                    double candidate = (destination - fixedAnchor.Y) / basis;
+                    if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
                     {
-                        double distance = Math.Abs(targetEdge - current);
-                        double candidate = (targetEdge - fixedAnchor.Y) / basis;
-                        if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
-                        {
-                            best = distance; result = candidate;
-                            double scaledLeft = fixedAnchor.X + (source.Left - fixedAnchor.X) * candidate;
-                            double scaledRight = fixedAnchor.X + (source.Right - fixedAnchor.X) * candidate;
-                            bestGuide = Tuple.Create(new Point(Math.Min(scaledLeft, scaledRight), targetEdge),
-                                new Point(Math.Max(scaledLeft, scaledRight), targetEdge));
-                        }
+                        best = distance; result = candidate;
+                        double scaledLeft = fixedAnchor.X + (source.Left - fixedAnchor.X) * candidate;
+                        double scaledRight = fixedAnchor.X + (source.Right - fixedAnchor.X) * candidate;
+                        bestGuide = Tuple.Create(new Point(Math.Min(scaledLeft, scaledRight), destination),
+                            new Point(Math.Max(scaledLeft, scaledRight), destination));
                     }
                 }
             }
@@ -494,7 +496,7 @@ namespace ArkBoard
                 dc.DrawLine(p, new Point(cx + 2, cy - 72), new Point(cx + 11, cy - 83));
                 dc.DrawLine(p, new Point(cx + 11, cy - 83), new Point(cx + 21, cy - 66));
                 dc.DrawEllipse(null, p, new Point(cx + 13, cy - 91), 3, 3);
-                DrawCentered(dc, Localization.T("A space for your ideas"), 24, Brushes.WhiteSmoke, cy - 28);
+                DrawCentered(dc, Localization.T("A space for your ideas"), 24, accent, cy - 28);
                 DrawCentered(dc, Localization.T("Drop images here from your computer or browser"), 14, muted, cy + 14);
                 DrawCentered(dc, Localization.T("or press Ctrl+I to import and Ctrl+V to paste"), 12, muted, cy + 42);
             }
@@ -684,7 +686,7 @@ namespace ArkBoard
                         List<Tuple<Point, Point>> guides;
                         delta = CalculateMoveSnap(originals.Values,
                             Document.Items.Where(i => !Document.Selected.Contains(i.Id)), delta,
-                            8 / Math.Max(.01, Document.Zoom), out guides);
+                            8 / Math.Max(.01, Document.Zoom), ImagePadding, out guides);
                         snapGuides.AddRange(guides);
                     }
                     foreach (ImageItem i in Document.Selection)
@@ -702,7 +704,7 @@ namespace ArkBoard
                         List<Tuple<Point, Point>> guides;
                         factor = CalculateScaleSnap(VisibleBounds(originals.Values),
                             Document.Items.Where(i => !Document.Selected.Contains(i.Id)), anchor, factor,
-                            minimum, maximum, 8 / Math.Max(.01, Document.Zoom), out guides);
+                            minimum, maximum, 8 / Math.Max(.01, Document.Zoom), ImagePadding, out guides);
                         snapGuides.AddRange(guides);
                     }
                     ApplyGroupScale(Document.Selection, originals, anchor, diagonal, anchor + diagonal * factor);
@@ -730,7 +732,7 @@ namespace ArkBoard
                             List<Tuple<Point, Point>> guides;
                             factor = CalculateScaleSnap(VisibleWorldBounds(transformStart),
                                 Document.Items.Where(i => i.Id != transformStart.Id), anchor, factor,
-                                minimum, maximum, 8 / Math.Max(.01, Document.Zoom), out guides);
+                                minimum, maximum, 8 / Math.Max(.01, Document.Zoom), ImagePadding, out guides);
                             snapGuides.AddRange(guides);
                         }
                         Point center = anchor + diagonal * factor / 2;

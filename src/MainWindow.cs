@@ -47,7 +47,7 @@ namespace ArkBoard
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
-        internal MenuItem snappingItem;
+        internal MenuItem snappingItem, paddingItem;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy, locked, minimalUi;
         bool testMode;
@@ -281,6 +281,7 @@ namespace ArkBoard
             for (int i = 0; i < languageItems.Count; i++) languageItems[i].IsChecked = i == (int)language;
             LocalizeTree(Root);
             if (Board.ContextMenu != null) LocalizeTree(Board.ContextMenu);
+            RefreshPaddingMenu();
             layersUiKey = null; Refresh(); Board.InvalidateVisual();
             SetStatus(language == UiLanguage.Italian ? "Lingua impostata su Italiano" : language == UiLanguage.Japanese ? "表示言語を日本語に変更しました" : "Language set to English");
         }
@@ -358,6 +359,9 @@ namespace ArkBoard
                 SetStatus(Board.Snapping ? "Snapping enabled" : "Snapping disabled");
             };
             settings.Items.Add(snappingItem);
+            paddingItem = MenuHeader("Image Padding");
+            paddingItem.Click += delegate { ConfigureImagePadding(); };
+            settings.Items.Add(paddingItem); RefreshPaddingMenu();
             invertDragZoomItem = MenuHeader("Invert Alt + Middle Drag Zoom"); invertDragZoomItem.IsCheckable = true;
             invertDragZoomItem.Click += delegate { Board.InvertDragZoom = invertDragZoomItem.IsChecked; };
             settings.Items.Add(invertDragZoomItem);
@@ -798,9 +802,27 @@ namespace ArkBoard
         {
             var items = (Document.Selected.Count > 0 ? Document.Selection : Document.Items).ToList(); if (items.Count == 0) return;
             Board.FinishGesture();
-            if (items.Count > 1) Document.Change(() => ImageLayout.Pack(items, 16));
+            if (items.Count > 1) Document.Change(() => ImageLayout.Pack(items, Board.ImagePadding));
             Board.Fit(Document.Selected.Count > 0);
             SetStatus("Images packed · Sizes and rotations preserved");
+        }
+        void RefreshPaddingMenu()
+        {
+            if (paddingItem != null) paddingItem.Header = Localization.T("Image Padding") + "   " +
+                Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture) + " px";
+        }
+        internal bool SetImagePadding(double value)
+        {
+            if (!BoardDocument.Finite(value) || value < 0 || value > 10000) return false;
+            Board.ImagePadding = Math.Round(value, 2); RefreshPaddingMenu();
+            status.Text = Localization.T("Image Padding") + ": " + Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture) + " px";
+            return true;
+        }
+        void ConfigureImagePadding()
+        {
+            double? value = DarkDialog.PromptNumber(this, Localization.T("Image Padding"),
+                Localization.T("Distance between images during packing and snapping, in canvas pixels."), Board.ImagePadding, 0, 10000);
+            if (value.HasValue) SetImagePadding(value.Value);
         }
         bool ConfirmDiscard()
         {

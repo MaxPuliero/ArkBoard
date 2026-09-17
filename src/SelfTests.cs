@@ -342,16 +342,19 @@ namespace ArkBoard
             Rect snapVisible = BoardSurface.VisibleWorldBounds(snapSource);
             List<Tuple<Point, Point>> snapGuides;
             Vector snappedMove = BoardSurface.CalculateMoveSnap(new[] { snapSource }, new[] { snapTarget },
-                new Vector(52, 0), 8, out snapGuides);
-            Check(Near(snapVisible.Left, -100) && Near(snapVisible.Right, 0) && Near(snappedMove.X, 57) &&
-                snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 57),
-                "Move snapping uses the visible masked border and emits a white edge guide");
+                new Vector(35, 0), 8, 16, out snapGuides);
+            Check(Near(snapVisible.Left, -100) && Near(snapVisible.Right, 0) && Near(snappedMove.X, 41) &&
+                Near(BoardSurface.VisibleWorldBounds(snapTarget).Left - (snapVisible.Right + snappedMove.X), 16) &&
+                snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 41),
+                "Move snapping uses the visible masked border, preserves padding and emits a white edge guide");
             snapTarget.X = 105;
             double snappedScale = BoardSurface.CalculateScaleSnap(snapVisible, new[] { snapTarget },
-                new Point(-100, -50), 1.5, .01, 100, 8, out snapGuides);
-            Check(Near(snappedScale, 1.55) && snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 55),
-                "Proportional scaling snaps the visible masked border to another image");
-            Check(!new BoardSurface(new BoardDocument()).Snapping, "Image snapping is disabled by default");
+                new Point(-100, -50), 1.35, .01, 100, 8, 16, out snapGuides);
+            Check(Near(snappedScale, 1.39) && snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 39),
+                "Proportional scaling snaps the visible masked border with the configured padding");
+            BoardSurface defaultSnapBoard = new BoardSurface(new BoardDocument());
+            Check(!defaultSnapBoard.Snapping && Near(defaultSnapBoard.ImagePadding, 16),
+                "Image snapping is disabled by default with a 16-pixel padding");
             using (Stream cursorStream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor"))
             {
                 Check(cursorStream != null, "The rotation cursor is embedded in the portable executable");
@@ -396,6 +399,10 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Check(window.snappingItem != null && window.snappingItem.IsCheckable && !window.snappingItem.IsChecked && !window.Board.Snapping,
                 "Settings exposes snapping as an opt-in toggle");
+            Check(window.paddingItem != null && ((string)window.paddingItem.Header).Contains("16 px"),
+                "Settings shows the shared snapping and packing padding");
+            Check(window.SetImagePadding(24) && Near(window.Board.ImagePadding, 24) && ((string)window.paddingItem.Header).Contains("24 px") &&
+                !window.SetImagePadding(-1), "Image padding accepts valid canvas-pixel values and rejects invalid values");
             window.snappingItem.IsChecked = true;
             window.snappingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Check(window.Board.Snapping, "The Settings snapping toggle updates the canvas behavior");
@@ -531,7 +538,9 @@ namespace ArkBoard
             window.Document.Redo();
             Check(window.Document.Selection.All(i => Near(Math.Max(i.Width, i.Height), expectedSide)), "Normalize can be redone");
             window.Document.Undo(); window.PackImages();
-            Check(!window.Document.Items[0].Bounds().IntersectsWith(window.Document.Items[1].Bounds()) &&
+            Rect packedFirst = window.Document.Items[0].Bounds(); packedFirst.Inflate(11.9, 11.9);
+            Rect packedSecond = window.Document.Items[1].Bounds(); packedSecond.Inflate(11.9, 11.9);
+            Check(!packedFirst.IntersectsWith(packedSecond) &&
                 Near(window.Document.Items[2].X, originalLayout[2].X) && Near(window.Document.Items[2].Y, originalLayout[2].Y), "Packing a selection leaves other images untouched");
             window.Document.Undo();
             Check(window.Document.Items.Select((i, k) => Near(i.X, originalLayout[k].X) && Near(i.Y, originalLayout[k].Y)).All(v => v), "Packing can be undone");
