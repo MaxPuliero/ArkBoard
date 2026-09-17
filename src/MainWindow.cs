@@ -48,6 +48,8 @@ namespace ArkBoard
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
         internal MenuItem snappingItem, paddingItem;
+        internal TextBox paddingBox;
+        TextBlock paddingLabel;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy, locked, minimalUi;
         bool testMode;
@@ -359,10 +361,8 @@ namespace ArkBoard
                 SetStatus(Board.Snapping ? "Snapping enabled" : "Snapping disabled");
             };
             settings.Items.Add(snappingItem);
-            paddingItem = MenuHeader("Image Padding");
-            paddingItem.Click += delegate { ConfigureImagePadding(); };
-            settings.Items.Add(paddingItem); RefreshPaddingMenu();
-            invertDragZoomItem = MenuHeader("Invert Alt + Middle Drag Zoom"); invertDragZoomItem.IsCheckable = true;
+            paddingItem = BuildPaddingSetting(); settings.Items.Add(paddingItem); RefreshPaddingMenu();
+            invertDragZoomItem = MenuHeader("Invert Zoom"); invertDragZoomItem.IsCheckable = true;
             invertDragZoomItem.Click += delegate { Board.InvertDragZoom = invertDragZoomItem.IsChecked; };
             settings.Items.Add(invertDragZoomItem);
             languageMenu = MenuHeader("Language"); settings.Items.Add(languageMenu);
@@ -808,8 +808,8 @@ namespace ArkBoard
         }
         void RefreshPaddingMenu()
         {
-            if (paddingItem != null) paddingItem.Header = Localization.T("Image Padding") + "   " +
-                Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture) + " px";
+            if (paddingLabel != null) paddingLabel.Text = Localization.T("Image Padding");
+            if (paddingBox != null) paddingBox.Text = Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture);
         }
         internal bool SetImagePadding(double value)
         {
@@ -818,11 +818,53 @@ namespace ArkBoard
             status.Text = Localization.T("Image Padding") + ": " + Board.ImagePadding.ToString("0.##", CultureInfo.CurrentCulture) + " px";
             return true;
         }
-        void ConfigureImagePadding()
+        MenuItem BuildPaddingSetting()
         {
-            double? value = DarkDialog.PromptNumber(this, Localization.T("Image Padding"),
-                Localization.T("Distance between images during packing and snapping, in canvas pixels."), Board.ImagePadding, 0, 10000);
-            if (value.HasValue) SetImagePadding(value.Value);
+            var item = new MenuItem { StaysOpenOnClick = true };
+            var row = new Grid { Width = 270 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(68) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            paddingLabel = new TextBlock { Text = Localization.T("Image Padding"), Tag = "Image Padding", VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(paddingLabel);
+            Button down = PaddingArrow("◀", -1); Grid.SetColumn(down, 1); row.Children.Add(down);
+            var field = new Grid { Margin = new Thickness(2, 0, 2, 0) }; Grid.SetColumn(field, 2);
+            paddingBox = new TextBox { Text = "4", TextAlignment = TextAlignment.Right, Padding = new Thickness(4, 3, 23, 3),
+                VerticalContentAlignment = VerticalAlignment.Center };
+            paddingBox.PreviewKeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Enter) { CommitPaddingText(); e.Handled = true; }
+                else if (e.Key == Key.Up) { AdjustImagePadding(1); e.Handled = true; }
+                else if (e.Key == Key.Down) { AdjustImagePadding(-1); e.Handled = true; }
+            };
+            paddingBox.LostKeyboardFocus += delegate { CommitPaddingText(); };
+            field.Children.Add(paddingBox);
+            field.Children.Add(new TextBlock { Text = "px", Foreground = secondary, HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), IsHitTestVisible = false });
+            row.Children.Add(field);
+            Button up = PaddingArrow("▶", 1); Grid.SetColumn(up, 3); row.Children.Add(up);
+            item.Header = row; return item;
+        }
+        Button PaddingArrow(string glyph, double delta)
+        {
+            var button = new Button { Content = glyph, Width = 22, MinWidth = 0, Height = 24, Padding = new Thickness(0),
+                Margin = new Thickness(1, 0, 1, 0), BorderThickness = new Thickness(0), Background = Brushes.Transparent,
+                Foreground = secondary, ToolTip = delta < 0 ? "-1 px" : "+1 px" };
+            button.Click += delegate { AdjustImagePadding(delta); };
+            return button;
+        }
+        void AdjustImagePadding(double delta)
+        {
+            SetImagePadding(Math.Max(0, Math.Min(10000, Board.ImagePadding + delta)));
+            if (paddingBox != null) { paddingBox.Focus(); paddingBox.SelectAll(); }
+        }
+        void CommitPaddingText()
+        {
+            if (paddingBox == null) return;
+            double value;
+            if (!Number(paddingBox.Text, out value) || !SetImagePadding(value))
+            { SetStatus("Enter a value from 0 to 10,000 pixels."); RefreshPaddingMenu(); }
         }
         bool ConfirmDiscard()
         {
@@ -1042,11 +1084,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.12.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.13.2\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.12.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.13.2\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.12.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.13.2\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

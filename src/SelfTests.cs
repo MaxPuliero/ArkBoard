@@ -144,6 +144,16 @@ namespace ArkBoard
             var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
             using (Stream s = File.Create(path)) png.Save(s);
         }
+        static void CaptureElement(FrameworkElement element, string path)
+        {
+            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            element.Arrange(new Rect(element.DesiredSize)); element.UpdateLayout();
+            int width = Math.Max(1, (int)Math.Ceiling(element.ActualWidth));
+            int height = Math.Max(1, (int)Math.Ceiling(element.ActualHeight));
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(element);
+            var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+            using (Stream stream = File.Create(path)) png.Save(stream);
+        }
         static void CaptureControlWindow(Window window, string path)
         {
             window.UpdateLayout();
@@ -353,8 +363,15 @@ namespace ArkBoard
             Check(Near(snappedScale, 1.39) && snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 39),
                 "Proportional scaling snaps the visible masked border with the configured padding");
             BoardSurface defaultSnapBoard = new BoardSurface(new BoardDocument());
-            Check(!defaultSnapBoard.Snapping && Near(defaultSnapBoard.ImagePadding, 16),
-                "Image snapping is disabled by default with a 16-pixel padding");
+            Check(!defaultSnapBoard.Snapping && Near(defaultSnapBoard.ImagePadding, 4),
+                "Image snapping is disabled by default with a 4-pixel padding");
+            Check(!defaultSnapBoard.SnapEnabledForModifiers(ModifierKeys.None) &&
+                defaultSnapBoard.SnapEnabledForModifiers(ModifierKeys.Control),
+                "Control temporarily enables snapping while the persistent setting is off");
+            defaultSnapBoard.Snapping = true;
+            Check(defaultSnapBoard.SnapEnabledForModifiers(ModifierKeys.None) &&
+                !defaultSnapBoard.SnapEnabledForModifiers(ModifierKeys.Control),
+                "Control temporarily disables snapping while the persistent setting is on");
             using (Stream cursorStream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor"))
             {
                 Check(cursorStream != null, "The rotation cursor is embedded in the portable executable");
@@ -399,10 +416,14 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Check(window.snappingItem != null && window.snappingItem.IsCheckable && !window.snappingItem.IsChecked && !window.Board.Snapping,
                 "Settings exposes snapping as an opt-in toggle");
-            Check(window.paddingItem != null && ((string)window.paddingItem.Header).Contains("16 px"),
-                "Settings shows the shared snapping and packing padding");
-            Check(window.SetImagePadding(24) && Near(window.Board.ImagePadding, 24) && ((string)window.paddingItem.Header).Contains("24 px") &&
-                !window.SetImagePadding(-1), "Image padding accepts valid canvas-pixel values and rejects invalid values");
+            Check(window.paddingItem != null && window.paddingBox != null && window.paddingBox.Text == "4" && window.paddingItem.Header is Grid,
+                "Settings shows the inline shared snapping and packing padding control");
+            Grid paddingControl = (Grid)window.paddingItem.Header;
+            Check(paddingControl.Children.OfType<Button>().Count() == 2 && paddingControl.Children.OfType<TextBlock>().Any(),
+                "Image padding exposes compact decrement and increment triangles beside its numeric field");
+            CaptureElement(paddingControl, Path.Combine(folder, "ui-padding-control.png"));
+            Check(window.SetImagePadding(24) && Near(window.Board.ImagePadding, 24) && window.paddingBox.Text == "24" &&
+                !window.SetImagePadding(-1), "Inline image padding accepts valid canvas-pixel values and rejects invalid values");
             window.snappingItem.IsChecked = true;
             window.snappingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Check(window.Board.Snapping, "The Settings snapping toggle updates the canvas behavior");

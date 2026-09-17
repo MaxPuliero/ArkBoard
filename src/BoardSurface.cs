@@ -16,7 +16,7 @@ namespace ArkBoard
         public bool ShowGrid = true;
         public bool AutoSorting = true;
         public bool Snapping;
-        public double ImagePadding = 16;
+        public double ImagePadding = 4;
         public bool InvertDragZoom;
         public bool SpaceDown;
         internal bool ShiftPreview;
@@ -373,6 +373,8 @@ namespace ArkBoard
             return result;
         }
         static double Limit(double value, double minimum, double maximum) { return Math.Max(minimum, Math.Min(maximum, value)); }
+        internal bool SnapEnabledForModifiers(ModifierKeys modifiers)
+        { return Snapping != ((modifiers & ModifierKeys.Control) != 0); }
         internal bool AutoSortSelection(ImageItem dragged)
         {
             if (!AutoSorting || dragged == null || dragged.IsText || !Document.Selected.Contains(dragged.Id)) return false;
@@ -681,7 +683,7 @@ namespace ArkBoard
                 {
                     Vector delta = world - startWorld;
                     snapGuides.Clear();
-                    if (Snapping && originals.Values.All(i => !i.IsText))
+                    if (SnapEnabledForModifiers(Keyboard.Modifiers) && originals.Values.All(i => !i.IsText))
                     {
                         List<Tuple<Point, Point>> guides;
                         delta = CalculateMoveSnap(originals.Values,
@@ -699,7 +701,7 @@ namespace ArkBoard
                     double minimum = originals.Values.Max(i => 1.0 / Math.Min(i.Width, i.Height));
                     double maximum = originals.Values.Min(i => 1000000.0 / Math.Max(i.Width, i.Height));
                     factor = Math.Max(minimum, Math.Min(maximum, factor));
-                    if (Snapping)
+                    if (SnapEnabledForModifiers(Keyboard.Modifiers))
                     {
                         List<Tuple<Point, Point>> guides;
                         factor = CalculateScaleSnap(VisibleBounds(originals.Values),
@@ -727,7 +729,7 @@ namespace ArkBoard
                         double maximum = 1000000.0 / Math.Max(transformStart.Width, transformStart.Height);
                         factor = Math.Max(minimum, Math.Min(maximum, factor));
                         snapGuides.Clear();
-                        if (Snapping && !transformStart.IsText)
+                        if (SnapEnabledForModifiers(Keyboard.Modifiers) && !transformStart.IsText)
                         {
                             List<Tuple<Point, Point>> guides;
                             factor = CalculateScaleSnap(VisibleWorldBounds(transformStart),
