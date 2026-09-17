@@ -47,6 +47,7 @@ namespace ArkBoard
         MenuItem flipXContextItem, flipYContextItem, rotateContextItem, resetRotationContextItem;
         MenuItem topmostItem, gridItem;
         MenuItem autoSortingItem, invertDragZoomItem, languageMenu;
+        internal MenuItem snappingItem;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
         bool busy, locked, minimalUi;
         bool testMode;
@@ -350,6 +351,13 @@ namespace ArkBoard
                 SetStatus("Auto-sorting " + (Board.AutoSorting ? "enabled" : "disabled"));
             };
             settings.Items.Add(autoSortingItem);
+            snappingItem = MenuHeader("Snapping"); snappingItem.IsCheckable = true;
+            snappingItem.Click += delegate
+            {
+                Board.Snapping = snappingItem.IsChecked;
+                SetStatus(Board.Snapping ? "Snapping enabled" : "Snapping disabled");
+            };
+            settings.Items.Add(snappingItem);
             invertDragZoomItem = MenuHeader("Invert Alt + Middle Drag Zoom"); invertDragZoomItem.IsCheckable = true;
             invertDragZoomItem.Click += delegate { Board.InvertDragZoom = invertDragZoomItem.IsChecked; };
             settings.Items.Add(invertDragZoomItem);

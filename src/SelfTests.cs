@@ -337,6 +337,21 @@ namespace ArkBoard
             var groupText = new ImageItem { Id = "group-text", Text = "Text", Width = 40, Height = 20 };
             groupDoc.Items.Add(groupText); groupDoc.Selected.Add(groupText.Id);
             Check(!groupBoard.HasGroupTransformSelection, "Mixed image and text selections do not expose image-only group transforms");
+            var snapSource = new ImageItem { Id = "snap-source", X = 0, Y = 0, Width = 200, Height = 100, MaskRight = .5 };
+            var snapTarget = new ImageItem { Id = "snap-target", X = 107, Y = 300, Width = 100, Height = 100 };
+            Rect snapVisible = BoardSurface.VisibleWorldBounds(snapSource);
+            List<Tuple<Point, Point>> snapGuides;
+            Vector snappedMove = BoardSurface.CalculateMoveSnap(new[] { snapSource }, new[] { snapTarget },
+                new Vector(52, 0), 8, out snapGuides);
+            Check(Near(snapVisible.Left, -100) && Near(snapVisible.Right, 0) && Near(snappedMove.X, 57) &&
+                snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 57),
+                "Move snapping uses the visible masked border and emits a white edge guide");
+            snapTarget.X = 105;
+            double snappedScale = BoardSurface.CalculateScaleSnap(snapVisible, new[] { snapTarget },
+                new Point(-100, -50), 1.5, .01, 100, 8, out snapGuides);
+            Check(Near(snappedScale, 1.55) && snapGuides.Count == 1 && Near(snapGuides[0].Item1.X, 55),
+                "Proportional scaling snaps the visible masked border to another image");
+            Check(!new BoardSurface(new BoardDocument()).Snapping, "Image snapping is disabled by default");
             using (Stream cursorStream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor"))
             {
                 Check(cursorStream != null, "The rotation cursor is embedded in the portable executable");
@@ -379,6 +394,13 @@ namespace ArkBoard
             var window = new MainWindow(true) { ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000 };
             window.Show();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            Check(window.snappingItem != null && window.snappingItem.IsCheckable && !window.snappingItem.IsChecked && !window.Board.Snapping,
+                "Settings exposes snapping as an opt-in toggle");
+            window.snappingItem.IsChecked = true;
+            window.snappingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(window.Board.Snapping, "The Settings snapping toggle updates the canvas behavior");
+            window.snappingItem.IsChecked = false;
+            window.snappingItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             window.OpenProject(beeV2Path);
             Check(window.Document.Items.Count == 2 && window.Document.Path == null && window.Document.Dirty,
                 "Open Project routes BeeRef files through read-only conversion instead of native project loading");

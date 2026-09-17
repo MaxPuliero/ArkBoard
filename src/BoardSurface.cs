@@ -15,6 +15,7 @@ namespace ArkBoard
         public readonly BoardDocument Document;
         public bool ShowGrid = true;
         public bool AutoSorting = true;
+        public bool Snapping;
         public bool InvertDragZoom;
         public bool SpaceDown;
         internal bool ShiftPreview;
@@ -49,6 +50,8 @@ namespace ArkBoard
         bool checkpoint;
         HashSet<string> selectionBefore;
         Rect marquee = Rect.Empty;
+        readonly List<Tuple<Point, Point>> snapGuides = new List<Tuple<Point, Point>>();
+        internal int SnapGuideCount { get { return snapGuides.Count; } }
 
         public BoardSurface(BoardDocument doc)
         {
@@ -261,6 +264,112 @@ namespace ArkBoard
             return new[] { new Point(r.Left, r.Top), new Point(r.Right, r.Top), new Point(r.Right, r.Bottom), new Point(r.Left, r.Bottom) }
                 .Select(p => ToScreen(m.Transform(p))).ToArray();
         }
+        internal static Rect VisibleWorldBounds(ImageItem item)
+        {
+            Rect r = item.VisibleRect; Matrix m = item.Matrix;
+            Point[] points = new[] { r.TopLeft, r.TopRight, r.BottomRight, r.BottomLeft }
+                .Select(m.Transform).ToArray();
+            return new Rect(new Point(points.Min(p => p.X), points.Min(p => p.Y)),
+                new Point(points.Max(p => p.X), points.Max(p => p.Y)));
+        }
+        static Rect VisibleBounds(IEnumerable<ImageItem> items)
+        {
+            Rect result = Rect.Empty;
+            foreach (ImageItem item in items.Where(i => !i.IsText))
+            {
+                Rect bounds = VisibleWorldBounds(item);
+                if (result.IsEmpty) result = bounds; else result.Union(bounds);
+            }
+            return result;
+        }
+        internal static Vector CalculateMoveSnap(IEnumerable<ImageItem> movingBases, IEnumerable<ImageItem> targets,
+            Vector rawDelta, double threshold, out List<Tuple<Point, Point>> guides)
+        {
+            guides = new List<Tuple<Point, Point>>();
+            Rect source = VisibleBounds(movingBases);
+            if (source.IsEmpty) return rawDelta;
+            source.Offset(rawDelta);
+            double bestX = threshold + 1, bestY = threshold + 1, correctionX = 0, correctionY = 0;
+            Tuple<Point, Point> guideX = null, guideY = null;
+            foreach (ImageItem target in targets.Where(i => !i.IsText))
+            {
+                Rect bounds = VisibleWorldBounds(target);
+                foreach (double sourceEdge in new[] { source.Left, source.Right })
+                    foreach (double targetEdge in new[] { bounds.Left, bounds.Right })
+                    {
+                        double distance = targetEdge - sourceEdge;
+                        if (Math.Abs(distance) <= threshold && Math.Abs(distance) < bestX)
+                        {
+                            bestX = Math.Abs(distance); correctionX = distance;
+                            guideX = Tuple.Create(new Point(targetEdge, source.Top), new Point(targetEdge, source.Bottom));
+                        }
+                    }
+                foreach (double sourceEdge in new[] { source.Top, source.Bottom })
+                    foreach (double targetEdge in new[] { bounds.Top, bounds.Bottom })
+                    {
+                        double distance = targetEdge - sourceEdge;
+                        if (Math.Abs(distance) <= threshold && Math.Abs(distance) < bestY)
+                        {
+                            bestY = Math.Abs(distance); correctionY = distance;
+                            guideY = Tuple.Create(new Point(source.Left, targetEdge), new Point(source.Right, targetEdge));
+                        }
+                    }
+            }
+            if (guideX != null) guides.Add(Tuple.Create(guideX.Item1 + new Vector(0, correctionY), guideX.Item2 + new Vector(0, correctionY)));
+            if (guideY != null) guides.Add(Tuple.Create(guideY.Item1 + new Vector(correctionX, 0), guideY.Item2 + new Vector(correctionX, 0)));
+            return rawDelta + new Vector(correctionX, correctionY);
+        }
+        internal static double CalculateScaleSnap(Rect source, IEnumerable<ImageItem> targets, Point fixedAnchor,
+            double rawFactor, double minimum, double maximum, double threshold, out List<Tuple<Point, Point>> guides)
+        {
+            guides = new List<Tuple<Point, Point>>();
+            double best = threshold + 1, result = rawFactor;
+            Tuple<Point, Point> bestGuide = null;
+            foreach (ImageItem target in targets.Where(i => !i.IsText))
+            {
+                Rect bounds = VisibleWorldBounds(target);
+                foreach (double sourceEdge in new[] { source.Left, source.Right })
+                {
+                    double basis = sourceEdge - fixedAnchor.X;
+                    if (Math.Abs(basis) < .000001) continue;
+                    double current = fixedAnchor.X + basis * rawFactor;
+                    foreach (double targetEdge in new[] { bounds.Left, bounds.Right })
+                    {
+                        double distance = Math.Abs(targetEdge - current);
+                        double candidate = (targetEdge - fixedAnchor.X) / basis;
+                        if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
+                        {
+                            best = distance; result = candidate;
+                            double scaledTop = fixedAnchor.Y + (source.Top - fixedAnchor.Y) * candidate;
+                            double scaledBottom = fixedAnchor.Y + (source.Bottom - fixedAnchor.Y) * candidate;
+                            bestGuide = Tuple.Create(new Point(targetEdge, Math.Min(scaledTop, scaledBottom)),
+                                new Point(targetEdge, Math.Max(scaledTop, scaledBottom)));
+                        }
+                    }
+                }
+                foreach (double sourceEdge in new[] { source.Top, source.Bottom })
+                {
+                    double basis = sourceEdge - fixedAnchor.Y;
+                    if (Math.Abs(basis) < .000001) continue;
+                    double current = fixedAnchor.Y + basis * rawFactor;
+                    foreach (double targetEdge in new[] { bounds.Top, bounds.Bottom })
+                    {
+                        double distance = Math.Abs(targetEdge - current);
+                        double candidate = (targetEdge - fixedAnchor.Y) / basis;
+                        if (distance <= threshold && distance < best && candidate >= minimum && candidate <= maximum)
+                        {
+                            best = distance; result = candidate;
+                            double scaledLeft = fixedAnchor.X + (source.Left - fixedAnchor.X) * candidate;
+                            double scaledRight = fixedAnchor.X + (source.Right - fixedAnchor.X) * candidate;
+                            bestGuide = Tuple.Create(new Point(Math.Min(scaledLeft, scaledRight), targetEdge),
+                                new Point(Math.Max(scaledLeft, scaledRight), targetEdge));
+                        }
+                    }
+                }
+            }
+            if (bestGuide != null) guides.Add(bestGuide);
+            return result;
+        }
         static double Limit(double value, double minimum, double maximum) { return Math.Max(minimum, Math.Min(maximum, value)); }
         internal bool AutoSortSelection(ImageItem dragged)
         {
@@ -360,6 +469,12 @@ namespace ArkBoard
                 for (int side = 0; side < 4; side++) dc.DrawLine(pen, corners[side], corners[(side + 1) % 4]);
                 foreach (Point corner in corners) dc.DrawRectangle(background, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
                 foreach (Point handle in GroupRotationHandles()) DrawRotationAnchor(dc, handle, pen);
+            }
+            if (snapGuides.Count > 0)
+            {
+                Pen snapPen = new Pen(Brushes.White, 3);
+                foreach (Tuple<Point, Point> guide in snapGuides)
+                    dc.DrawLine(snapPen, ToScreen(guide.Item1), ToScreen(guide.Item2));
             }
             if (!marquee.IsEmpty)
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(32, 169, 169, 169)), new Pen(accent, 1), marquee);
@@ -563,11 +678,35 @@ namespace ArkBoard
                 if (gesture == "move")
                 {
                     Vector delta = world - startWorld;
+                    snapGuides.Clear();
+                    if (Snapping && originals.Values.All(i => !i.IsText))
+                    {
+                        List<Tuple<Point, Point>> guides;
+                        delta = CalculateMoveSnap(originals.Values,
+                            Document.Items.Where(i => !Document.Selected.Contains(i.Id)), delta,
+                            8 / Math.Max(.01, Document.Zoom), out guides);
+                        snapGuides.AddRange(guides);
+                    }
                     foreach (ImageItem i in Document.Selection)
                     { ImageItem old = originals[i.Id]; i.X = old.X + delta.X; i.Y = old.Y + delta.Y; }
                 }
                 else if (gesture == "groupresize")
-                    ApplyGroupScale(Document.Selection, originals, anchor, diagonal, world);
+                {
+                    snapGuides.Clear();
+                    double factor = Vector.Multiply(world - anchor, diagonal) / diagonal.LengthSquared;
+                    double minimum = originals.Values.Max(i => 1.0 / Math.Min(i.Width, i.Height));
+                    double maximum = originals.Values.Min(i => 1000000.0 / Math.Max(i.Width, i.Height));
+                    factor = Math.Max(minimum, Math.Min(maximum, factor));
+                    if (Snapping)
+                    {
+                        List<Tuple<Point, Point>> guides;
+                        factor = CalculateScaleSnap(VisibleBounds(originals.Values),
+                            Document.Items.Where(i => !Document.Selected.Contains(i.Id)), anchor, factor,
+                            minimum, maximum, 8 / Math.Max(.01, Document.Zoom), out guides);
+                        snapGuides.AddRange(guides);
+                    }
+                    ApplyGroupScale(Document.Selection, originals, anchor, diagonal, anchor + diagonal * factor);
+                }
                 else if (gesture == "grouprotate")
                 {
                     double angle = Math.Atan2(world.Y - groupCenter.Y, world.X - groupCenter.X) * 180 / Math.PI;
@@ -582,8 +721,18 @@ namespace ArkBoard
                     if (gesture == "resize")
                     {
                         double factor = Vector.Multiply(world - anchor, diagonal) / diagonal.LengthSquared;
-                        factor = Math.Max(1.0 / Math.Min(transformStart.Width, transformStart.Height),
-                            Math.Min(1000000.0 / Math.Max(transformStart.Width, transformStart.Height), factor));
+                        double minimum = 1.0 / Math.Min(transformStart.Width, transformStart.Height);
+                        double maximum = 1000000.0 / Math.Max(transformStart.Width, transformStart.Height);
+                        factor = Math.Max(minimum, Math.Min(maximum, factor));
+                        snapGuides.Clear();
+                        if (Snapping && !transformStart.IsText)
+                        {
+                            List<Tuple<Point, Point>> guides;
+                            factor = CalculateScaleSnap(VisibleWorldBounds(transformStart),
+                                Document.Items.Where(i => i.Id != transformStart.Id), anchor, factor,
+                                minimum, maximum, 8 / Math.Max(.01, Document.Zoom), out guides);
+                            snapGuides.AddRange(guides);
+                        }
                         Point center = anchor + diagonal * factor / 2;
                         item.X = center.X; item.Y = center.Y;
                         item.Width = transformStart.Width * factor; item.Height = transformStart.Height * factor;
@@ -655,6 +804,7 @@ namespace ArkBoard
         public void FinishGesture()
         {
             gesture = null; marquee = Rect.Empty; originals = null; transformStart = null;
+            snapGuides.Clear();
             groupStartBounds = Rect.Empty; groupRotationDelta = 0;
             maskEdge = -1; draggedItemId = null;
             if (IsMouseCaptured) ReleaseMouseCapture(); Cursor = Cursors.Arrow; InvalidateVisual();
