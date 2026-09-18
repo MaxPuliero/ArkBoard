@@ -29,9 +29,13 @@ Keep **Open** and **Open Recent** as separate commands. Open Recent appears in b
 
 The canvas context menu mirrors all five top-level menu-bar sections and their commands. Keep its checkable View and Settings entries synchronized with the main menu so minimal UI mode never hides functionality.
 
+View controls: double-clicking an image selects and fits that image; double-clicking empty canvas fits the complete board. `F` fits the current selection, including multiple selected images, and fits all when nothing is selected. Text double-click remains reserved for text editing.
+
 The startup update check queries GitHub's latest-release API asynchronously with a short timeout and fails silently when offline. It must never delay the main window. The synchronized **Auto-Check for Updates** setting defaults on and persists as `checkForUpdates` in `%APPDATA%\ArkBoard\settings.ini`; its adjacent **Check** button performs a manual check, reports when the app is current, and downloads the trusted release asset through a Windows Save dialog. Self-tests must not access the real preference file.
 
 Keep the assembly version, build default directory, README version and release filename aligned. Preserve existing `.arkboard` manifests unless a feature requires a new schema version. Projects are ZIP archives with embedded source assets; PSD visibility is stored per canvas item.
+
+GitHub releases are separate from pushing `main` and tags: create the annotated `vX.Y.Z` tag, then create the GitHub release and upload the matching `ArkBoard-X.Y.Z-portable.zip`. The portable ZIP and `dist-*` folders are intentionally ignored by Git.
 
 ## Product constraints
 
