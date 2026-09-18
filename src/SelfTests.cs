@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -335,8 +336,29 @@ namespace ArkBoard
             Point[] rotationCorners = sortFirst.Corners().Select(sortBoard.ToScreen).ToArray();
             Check(rotationHandles.Length == 4 && Enumerable.Range(0, 4).All(k =>
                     Math.Abs((rotationHandles[k] - rotationCorners[k]).Length - Math.Sqrt(27 * 27 * 2)) < .001) &&
-                    sortBoard.RotationHandleAt(sortFirst, rotationHandles[2]) == 2,
+                    sortBoard.RotationHandleAt(sortFirst, rotationHandles[2]) == 2 && Near(BoardSurface.RotationAnchorRadius(rotationCorners), 8),
                 "Four inset rotation anchors stay clear of the corner scale handles and have generous hit targets");
+            Check(sortBoard.ShowsMoveCursor(sortFirst), "Selected images expose the movement cursor");
+            sortDoc.Selected.Clear();
+            Check(!sortBoard.ShowsMoveCursor(sortFirst), "Unselected images keep the normal pointer when hovered");
+            sortDoc.Selected.Add(sortFirst.Id);
+            sortDoc.Zoom = .1;
+            Point[] compactCorners = sortFirst.Corners().Select(sortBoard.ToScreen).ToArray();
+            Point[] compactRotationHandles = sortBoard.RotationHandles(sortFirst);
+            Point compactCenter = new Point(compactCorners.Average(point => point.X), compactCorners.Average(point => point.Y));
+            bool outerCenters = Enumerable.Range(0, 4).All(index =>
+            {
+                Point next = compactCorners[(index + 1) % 4];
+                Point midpoint = new Point((compactCorners[index].X + next.X) / 2, (compactCorners[index].Y + next.Y) / 2);
+                Vector offset = compactRotationHandles[index] - midpoint;
+                return Near(offset.Length, 28) && Vector.Multiply(offset, midpoint - compactCenter) > 0;
+            });
+            Check(BoardSurface.UsesOuterRotationHandles(compactCorners) && compactRotationHandles.Length == 4 && outerCenters &&
+                Near(BoardSurface.RotationAnchorRadius(compactCorners), 4) &&
+                sortBoard.RotationHandleAt(sortFirst, compactRotationHandles[0] + new Vector(13, 0)) == 0 &&
+                sortBoard.RotationHandleAt(sortFirst, compactCorners[0]) == -1,
+                "Small images use half-size outer rotation drawings while retaining the full hit area and clear scale corners");
+            sortDoc.Zoom = 1;
             var groupDoc = new BoardDocument();
             var groupFirst = new ImageItem { Id = "group-first", X = 0, Y = 0, Width = 100, Height = 50, FlipX = true, MaskLeft = .1 };
             var groupSecond = new ImageItem { Id = "group-second", X = 200, Y = 100, Width = 50, Height = 100, Rotation = 30 };
@@ -350,6 +372,11 @@ namespace ArkBoard
             Check(groupBoard.GroupCornerAt(groupCorners[2]) == 2 && groupRotationHandles.Length == 4 &&
                 groupBoard.GroupRotationHandleAt(groupRotationHandles[1]) == 1,
                 "Group bounding box exposes corner scale handles and inset rotation anchors");
+            groupDoc.Zoom = .2; groupCorners = groupBoard.GroupCorners(); groupRotationHandles = groupBoard.GroupRotationHandles();
+            Check(BoardSurface.UsesOuterRotationHandles(groupCorners) && groupRotationHandles.Length == 4 &&
+                groupBoard.GroupRotationHandleAt(groupRotationHandles[3]) == 3,
+                "Small on-screen group bounds also move their rotation anchors outside the side centers");
+            groupDoc.Zoom = 1;
             Dictionary<string, ImageItem> groupBases = groupDoc.Selection.ToDictionary(i => i.Id, i => i.Copy());
             Point fixedAnchor = groupBounds.TopLeft; Vector groupDiagonal = groupBounds.BottomRight - fixedAnchor;
             groupDoc.Checkpoint();
@@ -591,7 +618,7 @@ namespace ArkBoard
             Capture(window, Path.Combine(folder, "ui-board.png"));
             MenuItem[] contextSections = window.Board.ContextMenu.Items.OfType<MenuItem>().ToArray();
             Check(contextSections.Length == 5 && contextSections.Select(item => (string)item.Tag).SequenceEqual(new[] { "_File", "_Edit", "_View", "_Settings", "_Help" }) &&
-                contextSections[0].Items.Count == 9 && contextSections[1].Items.Count == 14 && contextSections[2].Items.Count == 7 &&
+                contextSections[0].Items.Count == 9 && contextSections[1].Items.Count == 16 && contextSections[2].Items.Count == 7 &&
                 contextSections[3].Items.Count == 5 && contextSections[4].Items.Count == 1,
                 "The canvas context menu mirrors every top-level menu-bar section and command group");
             CaptureContextMenu(window, Path.Combine(folder, "ui-context-menu.png"));
@@ -613,6 +640,19 @@ namespace ArkBoard
             window.Document.Undo();
             Check(Near(window.Document.Items[0].Rotation, -8), "Reset rotation is undoable");
             var originalLayout = window.Document.Items.Select(i => i.Copy()).ToArray();
+            double expectedWidth = originalLayout.Take(2).Average(i => i.Width);
+            window.AlignSelected(true);
+            Check(window.Document.Selection.All(i => Near(i.Width, expectedWidth)) &&
+                window.Document.Selection.Select((i, k) => Near(i.Width / i.Height, originalLayout[k].Width / originalLayout[k].Height)).All(value => value) &&
+                Near(window.Document.Items[2].Width, originalLayout[2].Width),
+                "Align Width uses the selected average, preserves aspect ratios and leaves unselected images unchanged");
+            window.Document.Undo();
+            double expectedHeight = originalLayout.Take(2).Average(i => i.Height);
+            window.AlignSelected(false);
+            Check(window.Document.Selection.All(i => Near(i.Height, expectedHeight)) &&
+                window.Document.Selection.Select((i, k) => Near(i.Width / i.Height, originalLayout[k].Width / originalLayout[k].Height)).All(value => value),
+                "Align Height uses the selected average and preserves aspect ratios");
+            window.Document.Undo();
             double expectedSide = originalLayout.Take(2).Average(i => Math.Max(i.Width, i.Height));
             window.NormalizeSelected();
             Check(window.Document.Selection.All(i => Near(Math.Max(i.Width, i.Height), expectedSide)), "Normalize uses the selection's average longest side");
@@ -641,6 +681,14 @@ namespace ArkBoard
             for (int a = 0; a < mixed.Count; a++) for (int b = a + 1; b < mixed.Count; b++)
             { Rect ra = mixed[a].Bounds(); ra.Inflate(7.999, 7.999); Rect rb = mixed[b].Bounds(); rb.Inflate(7.999, 7.999); overlaps |= ra.IntersectsWith(rb); }
             Check(!overlaps, "Packing 150 mixed rotated rectangles maintains a 16-unit gap without overlaps");
+            Rect packedEnvelope = Rect.Empty; double packedArea = 0;
+            foreach (ImageItem item in mixed)
+            {
+                Rect bounds = item.Bounds(); packedEnvelope.Union(bounds);
+                packedArea += (bounds.Width + 16) * (bounds.Height + 16);
+            }
+            double packingFill = packedArea / ((packedEnvelope.Width + 16) * (packedEnvelope.Height + 16));
+            Check(packingFill > .72, "Best-fit packing reuses open regions and keeps empty area below 28 percent (fill=" + packingFill.ToString("P1", CultureInfo.InvariantCulture) + ")");
             var packed = mixed.Select(i => i.Copy()).ToArray(); ImageLayout.Pack(mixed, 16);
             Check(mixed.Select((i, k) => Near(i.X, packed[k].X) && Near(i.Y, packed[k].Y)).All(v => v), "Repeated packing is deterministic");
             window.Document.Selected.UnionWith(window.Document.Items.Select(i => i.Id)); window.Document.Notify();
@@ -726,10 +774,15 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             window.Board.Fit(false); Capture(window, Path.Combine(folder, "ui-text.png"));
             int beforeClipboardPaste = window.Document.Items.Count;
-            ImageItem pastedMask = window.PasteClipboardImage(clipboardItem, clipboardAsset, new Point(50, 75));
+            Point cursorScreen = new Point(window.Board.ActualWidth * .3, window.Board.ActualHeight * .4);
+            Point cursorWorld = window.PasteTarget(cursorScreen);
+            Check(Near(cursorWorld.X, window.Board.ToWorld(cursorScreen).X) && Near(cursorWorld.Y, window.Board.ToWorld(cursorScreen).Y) &&
+                window.PasteTarget(new Point(-1, -1)) == window.Board.CenterWorld,
+                "Clipboard paste resolves a canvas cursor to world coordinates and falls back to the viewport center outside it");
+            ImageItem pastedMask = window.PasteClipboardImage(clipboardItem, clipboardAsset, cursorWorld);
             Check(window.Document.Items.Count == beforeClipboardPaste + 1 && pastedMask.HasMask && Near(pastedMask.MaskLeft, .3) &&
-                Near(pastedMask.X, 50) && Near(pastedMask.Y, 75),
-                "Pasting ArkBoard clipboard data creates a new image while preserving its mask");
+                Near(pastedMask.X, cursorWorld.X) && Near(pastedMask.Y, cursorWorld.Y),
+                "Pasting ArkBoard clipboard data creates an image under the cursor while preserving its mask");
             window.Document.Reset();
             ImageItem uiPsd = window.Document.Add(psd, "Layers.psd", new Point(320, 260));
             window.Document.Selected.Add(uiPsd.Id); window.Document.Notify(); window.Board.Fit(false);

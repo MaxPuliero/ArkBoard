@@ -342,6 +342,8 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Paste", "Ctrl+V", Paste));
             edit.Items.Add(MenuAction("Duplicate Selection", "Ctrl+D", Duplicate));
             edit.Items.Add(MenuAction("Select / Deselect All", "A", ToggleSelectAll));
+            edit.Items.Add(MenuAction("Align Width", "", () => AlignSelected(true)));
+            edit.Items.Add(MenuAction("Align Height", "", () => AlignSelected(false)));
             edit.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
             edit.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
             edit.Items.Add(MenuSeparator());
@@ -599,6 +601,8 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Paste", "Ctrl+V", Paste));
             edit.Items.Add(MenuAction("Duplicate Selection", "Ctrl+D", Duplicate));
             edit.Items.Add(MenuAction("Select / Deselect All", "A", ToggleSelectAll));
+            edit.Items.Add(MenuAction("Align Width", "", () => AlignSelected(true)));
+            edit.Items.Add(MenuAction("Align Height", "", () => AlignSelected(false)));
             edit.Items.Add(MenuAction("Normalize Size", "Ctrl+A", NormalizeSelected));
             edit.Items.Add(MenuAction("Pack Images", "Ctrl+P", PackImages));
             edit.Items.Add(MenuSeparator());
@@ -875,6 +879,14 @@ namespace ArkBoard
             Board.FinishGesture();
             Document.Change(() => ImageLayout.Normalize(items));
             SetStatus("Size normalized · Aspect ratios preserved");
+        }
+        internal void AlignSelected(bool width)
+        {
+            var items = Document.Selection.Where(i => !i.IsText).ToList();
+            if (items.Count < 2) { SetStatus("Select at least two images to align their size."); return; }
+            Board.FinishGesture();
+            Document.Change(() => { if (width) ImageLayout.AlignWidth(items); else ImageLayout.AlignHeight(items); });
+            SetStatus(width ? "Widths aligned · Aspect ratios preserved" : "Heights aligned · Aspect ratios preserved");
         }
         internal void PackImages()
         {
@@ -1154,11 +1166,17 @@ namespace ArkBoard
         {
             try
             {
+                Point center = PasteTarget(Mouse.GetPosition(Board));
                 IDataObject data = Clipboard.GetDataObject(); ImageItem item; AssetData asset;
-                if (ArkBoardClipboard.TryRead(data, out item, out asset)) { PasteClipboardImage(item, asset, Board.CenterWorld); return; }
-                await ImportSources(Importer.Extract(data), Board.CenterWorld);
+                if (ArkBoardClipboard.TryRead(data, out item, out asset)) { PasteClipboardImage(item, asset, center); return; }
+                await ImportSources(Importer.Extract(data), center);
             }
             catch (Exception ex) { Error("Unable to paste", ex); }
+        }
+        internal Point PasteTarget(Point screen)
+        {
+            return screen.X >= 0 && screen.Y >= 0 && screen.X <= Board.ActualWidth && screen.Y <= Board.ActualHeight
+                ? Board.ToWorld(screen) : Board.CenterWorld;
         }
         internal ImageItem PasteClipboardImage(ImageItem source, AssetData asset, Point center)
         {
@@ -1285,11 +1303,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.15.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.16.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.15.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.16.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.15.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.16.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

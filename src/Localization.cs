@@ -31,6 +31,8 @@ namespace ArkBoard
             { "Duplicate", new[]{ "Duplicate", "Duplica", "複製" } },
             { "Duplicate Selection", new[]{ "Duplicate Selection", "Duplica selezione", "選択を複製" } },
             { "Select / Deselect All", new[]{ "Select / Deselect All", "Seleziona / deseleziona tutto", "すべて選択 / 解除" } },
+            { "Align Width", new[]{ "Align Width", "Uniforma larghezza", "幅を揃える" } },
+            { "Align Height", new[]{ "Align Height", "Uniforma altezza", "高さを揃える" } },
             { "Normalize Size", new[]{ "Normalize Size", "Uniforma dimensioni", "サイズを揃える" } },
             { "Pack Images", new[]{ "Pack Images", "Compatta immagini", "画像を整列" } },
             { "Reset Scale", new[]{ "Reset Scale", "Reimposta scala", "スケールをリセット" } },
@@ -122,6 +124,9 @@ namespace ArkBoard
             ,{ "Masks removed", new[]{ "Masks removed", "Maschere rimosse", "マスクを解除しました" } }
             ,{ "Select at least two images to normalize their size.", new[]{ "Select at least two images to normalize their size.", "Seleziona almeno due immagini per uniformarne le dimensioni.", "サイズを揃える画像を2つ以上選択してください。" } }
             ,{ "Size normalized · Aspect ratios preserved", new[]{ "Size normalized · Aspect ratios preserved", "Dimensioni uniformate · Proporzioni mantenute", "サイズを統一 · 縦横比を維持" } }
+            ,{ "Select at least two images to align their size.", new[]{ "Select at least two images to align their size.", "Seleziona almeno due immagini da uniformare.", "サイズを揃える画像を2つ以上選択してください。" } }
+            ,{ "Widths aligned · Aspect ratios preserved", new[]{ "Widths aligned · Aspect ratios preserved", "Larghezze uniformate · Proporzioni mantenute", "幅を統一 · 縦横比を維持" } }
+            ,{ "Heights aligned · Aspect ratios preserved", new[]{ "Heights aligned · Aspect ratios preserved", "Altezze uniformate · Proporzioni mantenute", "高さを統一 · 縦横比を維持" } }
             ,{ "Images packed · Sizes and rotations preserved", new[]{ "Images packed · Sizes and rotations preserved", "Immagini compattate · Dimensioni e rotazioni mantenute", "画像を整列 · サイズと回転を維持" } }
             ,{ "Project opened · All images are embedded", new[]{ "Project opened · All images are embedded", "Progetto aperto · Tutte le immagini sono incorporate", "プロジェクトを開きました · 全画像を埋め込み済み" } }
             ,{ "BeeRef project imported", new[]{ "BeeRef project imported", "Progetto BeeRef importato", "BeeRefプロジェクトを読み込みました" } }

@@ -18,66 +18,111 @@ namespace ArkBoard
             }
         }
 
-        sealed class Node
+        sealed class Block
         {
-            internal double X, Y, Width, Height;
-            internal bool Used;
-            internal Node Right, Down;
-            internal Node(double x, double y, double w, double h) { X = x; Y = y; Width = w; Height = h; }
-            internal Node Find(double w, double h)
+            internal ImageItem Item;
+            internal Rect Bounds;
+            internal double Width, Height;
+        }
+        sealed class Packing
+        {
+            internal Rect[] Places;
+            internal double Score;
+        }
+        static bool Overlaps(Rect a, Rect b)
+        { return a.Left < b.Right - 1e-8 && a.Right > b.Left + 1e-8 && a.Top < b.Bottom - 1e-8 && a.Bottom > b.Top + 1e-8; }
+        static bool Contains(Rect outer, Rect inner)
+        { return inner.Left >= outer.Left - 1e-8 && inner.Top >= outer.Top - 1e-8 && inner.Right <= outer.Right + 1e-8 && inner.Bottom <= outer.Bottom + 1e-8; }
+        static void SplitFreeRectangles(List<Rect> free, Rect used)
+        {
+            for (int index = free.Count - 1; index >= 0; index--)
             {
-                var pending = new Stack<Node>(); pending.Push(this);
-                while (pending.Count > 0)
+                Rect space = free[index];
+                if (!Overlaps(space, used)) continue;
+                free.RemoveAt(index);
+                if (used.Left > space.Left + 1e-8) free.Add(new Rect(space.Left, space.Top, used.Left - space.Left, space.Height));
+                if (used.Right < space.Right - 1e-8) free.Add(new Rect(used.Right, space.Top, space.Right - used.Right, space.Height));
+                if (used.Top > space.Top + 1e-8) free.Add(new Rect(space.Left, space.Top, space.Width, used.Top - space.Top));
+                if (used.Bottom < space.Bottom - 1e-8) free.Add(new Rect(space.Left, used.Bottom, space.Width, space.Bottom - used.Bottom));
+            }
+            for (int a = free.Count - 1; a >= 0; a--)
+            {
+                if (free[a].Width <= 1e-8 || free[a].Height <= 1e-8) { free.RemoveAt(a); continue; }
+                for (int b = 0; b < free.Count; b++) if (a != b && Contains(free[b], free[a]))
+                { free.RemoveAt(a); break; }
+            }
+        }
+
+        internal static void AlignWidth(IList<ImageItem> items)
+        {
+            if (items.Count < 2) return;
+            double target = items.Average(i => i.Width);
+            foreach (ImageItem item in items)
+            {
+                double scale = target / item.Width;
+                item.Width = target; item.Height *= scale;
+            }
+        }
+
+        internal static void AlignHeight(IList<ImageItem> items)
+        {
+            if (items.Count < 2) return;
+            double target = items.Average(i => i.Height);
+            foreach (ImageItem item in items)
+            {
+                double scale = target / item.Height;
+                item.Height = target; item.Width *= scale;
+            }
+        }
+        static Packing TryPack(IList<Block> blocks, double width)
+        {
+            double heightLimit = blocks.Sum(b => b.Height);
+            var free = new List<Rect> { new Rect(0, 0, width, heightLimit) };
+            var places = new Rect[blocks.Count];
+            for (int blockIndex = 0; blockIndex < blocks.Count; blockIndex++)
+            {
+                Block block = blocks[blockIndex]; int best = -1;
+                double bestBottom = double.MaxValue, bestX = double.MaxValue, bestWaste = double.MaxValue;
+                for (int index = 0; index < free.Count; index++)
                 {
-                    Node node = pending.Pop();
-                    if (node.Used)
-                    {
-                        if (node.Down != null) pending.Push(node.Down);
-                        if (node.Right != null) pending.Push(node.Right);
-                    }
-                    else if (w <= node.Width + 1e-8 && h <= node.Height + 1e-8) return node;
+                    Rect space = free[index];
+                    if (block.Width > space.Width + 1e-8 || block.Height > space.Height + 1e-8) continue;
+                    double bottom = space.Top + block.Height;
+                    double waste = space.Width * space.Height - block.Width * block.Height;
+                    if (bottom < bestBottom - 1e-8 || (Math.Abs(bottom - bestBottom) < 1e-8 &&
+                        (space.Left < bestX - 1e-8 || (Math.Abs(space.Left - bestX) < 1e-8 && waste < bestWaste))))
+                    { best = index; bestBottom = bottom; bestX = space.Left; bestWaste = waste; }
                 }
-                return null;
+                if (best < 0) return null;
+                Rect place = new Rect(free[best].Left, free[best].Top, block.Width, block.Height);
+                places[blockIndex] = place; SplitFreeRectangles(free, place);
             }
-            internal void Split(double w, double h)
-            {
-                Used = true;
-                Right = new Node(X + w, Y, Math.Max(0, Width - w), h);
-                Down = new Node(X, Y + h, Width, Math.Max(0, Height - h));
-            }
+            double usedWidth = places.Max(r => r.Right), usedHeight = places.Max(r => r.Bottom);
+            double aspectPenalty = Math.Abs(Math.Log(Math.Max(1e-8, usedWidth / usedHeight) / 1.4));
+            return new Packing { Places = places, Score = usedWidth * usedHeight * (1 + .12 * aspectPenalty) };
         }
         internal static void Pack(IList<ImageItem> items, double gap)
         {
             if (items.Count < 2) return;
-            var blocks = items.Select(i => new { Item = i, Bounds = i.Bounds() })
-                .OrderByDescending(b => Math.Max(b.Bounds.Width, b.Bounds.Height))
-                .ThenByDescending(b => b.Bounds.Width * b.Bounds.Height).ToList();
+            var blocks = items.Select(i => new Block { Item = i, Bounds = i.Bounds(), Width = i.Bounds().Width + gap, Height = i.Bounds().Height + gap })
+                .OrderByDescending(b => b.Width * b.Height).ThenByDescending(b => Math.Max(b.Width, b.Height)).ToList();
             double left = blocks.Min(b => b.Bounds.Left), top = blocks.Min(b => b.Bounds.Top);
-            Node root = new Node(0, 0, blocks[0].Bounds.Width + gap, blocks[0].Bounds.Height + gap);
-            foreach (var block in blocks)
+            double totalArea = blocks.Sum(b => b.Width * b.Height), widest = blocks.Max(b => b.Width);
+            double idealWidth = Math.Max(widest, Math.Sqrt(totalArea * 1.4));
+            var widths = new List<double> { widest };
+            for (int step = -8; step <= 16; step++) widths.Add(Math.Max(widest, idealWidth * (1 + step * .05)));
+            Packing best = null;
+            foreach (double width in widths.Distinct().OrderBy(w => w))
             {
-                double w = block.Bounds.Width + gap, h = block.Bounds.Height + gap;
-                Node fit = root.Find(w, h);
-                if (fit == null)
-                {
-                    bool right = h <= root.Height + 1e-8, down = w <= root.Width + 1e-8;
-                    if (right && (!down || Math.Abs(Math.Log((root.Width + w) / root.Height / 1.4)) <=
-                        Math.Abs(Math.Log(root.Width / (root.Height + h) / 1.4))))
-                    {
-                        root = new Node(0, 0, root.Width + w, root.Height) { Used = true, Down = root,
-                            Right = new Node(root.Width, 0, w, root.Height) };
-                    }
-                    else if (down)
-                    {
-                        root = new Node(0, 0, root.Width, root.Height + h) { Used = true, Right = root,
-                            Down = new Node(0, root.Height, root.Width, h) };
-                    }
-                    else throw new InvalidOperationException("Unable to pack these image dimensions.");
-                    fit = root.Find(w, h);
-                }
-                fit.Split(w, h);
-                block.Item.X = left + fit.X + block.Bounds.Width / 2;
-                block.Item.Y = top + fit.Y + block.Bounds.Height / 2;
+                Packing candidate = TryPack(blocks, width);
+                if (candidate != null && (best == null || candidate.Score < best.Score)) best = candidate;
+            }
+            if (best == null) throw new InvalidOperationException("Unable to pack these image dimensions.");
+            for (int index = 0; index < blocks.Count; index++)
+            {
+                Block block = blocks[index]; Rect place = best.Places[index];
+                block.Item.X = left + place.X + block.Bounds.Width / 2;
+                block.Item.Y = top + place.Y + block.Bounds.Height / 2;
             }
         }
     }

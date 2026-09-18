@@ -141,9 +141,34 @@ namespace ArkBoard
         {
             return RotationHandles(item.Corners().Select(ToScreen).ToArray());
         }
+        internal static bool UsesOuterRotationHandles(Point[] corners)
+        {
+            if (corners == null || corners.Length != 4) return false;
+            double shortest = double.MaxValue;
+            for (int index = 0; index < 4; index++)
+                shortest = Math.Min(shortest, (corners[(index + 1) % 4] - corners[index]).Length);
+            return shortest < 90;
+        }
+        internal static double RotationAnchorRadius(Point[] corners)
+        { return UsesOuterRotationHandles(corners) ? 4 : 8; }
         static Point[] RotationHandles(Point[] corners)
         {
             var handles = new Point[4];
+            if (UsesOuterRotationHandles(corners))
+            {
+                Point center = new Point(corners.Average(p => p.X), corners.Average(p => p.Y));
+                for (int index = 0; index < 4; index++)
+                {
+                    Point nextCorner = corners[(index + 1) % 4];
+                    Point midpoint = new Point((corners[index].X + nextCorner.X) / 2, (corners[index].Y + nextCorner.Y) / 2);
+                    Vector side = nextCorner - corners[index];
+                    Vector outward = new Vector(side.Y, -side.X);
+                    if (outward.Length > .001) outward.Normalize();
+                    if (Vector.Multiply(outward, midpoint - center) < 0) outward *= -1;
+                    handles[index] = midpoint + outward * 28;
+                }
+                return handles;
+            }
             for (int index = 0; index < 4; index++)
             {
                 Vector next = corners[(index + 1) % 4] - corners[index];
@@ -194,18 +219,19 @@ namespace ArkBoard
             for (int index = 0; index < handles.Length; index++) if ((handles[index] - screen).Length <= 14) return index;
             return -1;
         }
-        void DrawRotationAnchor(DrawingContext dc, Point center, Pen pen)
+        void DrawRotationAnchor(DrawingContext dc, Point center, Pen pen, double radius)
         {
-            const double radius = 8;
             Point start = new Point(center.X + radius, center.Y);
             Point end = new Point(center.X, center.Y - radius);
             var figure = new PathFigure { StartPoint = start, IsClosed = false };
             figure.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, true, SweepDirection.Clockwise, true));
             var geometry = new PathGeometry(new[] { figure });
             dc.DrawGeometry(null, pen, geometry);
-            dc.DrawLine(pen, end, new Point(end.X - 4, end.Y + 1));
-            dc.DrawLine(pen, end, new Point(end.X + 1, end.Y + 4));
+            dc.DrawLine(pen, end, new Point(end.X - radius / 2, end.Y + radius / 8));
+            dc.DrawLine(pen, end, new Point(end.X + radius / 8, end.Y + radius / 2));
         }
+        internal bool ShowsMoveCursor(ImageItem item)
+        { return item != null && Document.Selected.Contains(item.Id); }
         internal void SetShiftPreview(bool active)
         {
             ShiftPreview = active;
@@ -463,7 +489,7 @@ namespace ArkBoard
                             dc.DrawRectangle(background, pen, new Rect(midpoint.X - 3, midpoint.Y - 3, 6, 6));
                         }
                         if (selected && Document.Selected.Count == 1 && !maskControls)
-                            foreach (Point handle in RotationHandles(item)) DrawRotationAnchor(dc, handle, pen);
+                            foreach (Point handle in RotationHandles(item)) DrawRotationAnchor(dc, handle, pen, RotationAnchorRadius(corners));
                     }
                 }
             }
@@ -472,7 +498,7 @@ namespace ArkBoard
                 Point[] corners = GroupControlCorners(); Pen pen = new Pen(accent, 1.5);
                 for (int side = 0; side < 4; side++) dc.DrawLine(pen, corners[side], corners[(side + 1) % 4]);
                 foreach (Point corner in corners) dc.DrawRectangle(background, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
-                foreach (Point handle in GroupRotationHandles()) DrawRotationAnchor(dc, handle, pen);
+                foreach (Point handle in GroupRotationHandles()) DrawRotationAnchor(dc, handle, pen, RotationAnchorRadius(corners));
             }
             if (snapGuides.Count > 0)
             {
@@ -607,7 +633,7 @@ namespace ArkBoard
                     if (!Document.Selected.Contains(hit.Id))
                     { if (!add) Document.Selected.Clear(); Document.Selected.Add(hit.Id); }
                     originals = Document.Selection.ToDictionary(i => i.Id, i => i.Copy());
-                    draggedItemId = hit.Id; gesture = "move";
+                    draggedItemId = hit.Id; gesture = "move"; Cursor = Cursors.SizeAll;
                 }
                 else
                 {
@@ -630,7 +656,7 @@ namespace ArkBoard
                 ShiftPreview = shiftDown; HoveredImageId = hoveredId;
                 if (previewChanged) InvalidateVisual();
                 if (TextToolArmed) { Cursor = Cursors.Cross; return; }
-                Cursor = SpaceDown ? Cursors.ScrollAll : hovered != null ? Cursors.SizeAll : Cursors.Arrow;
+                Cursor = SpaceDown ? Cursors.ScrollAll : ShowsMoveCursor(hovered) ? Cursors.SizeAll : Cursors.Arrow;
                 if (HasGroupTransformSelection)
                 {
                     if (GroupCornerAt(screen) >= 0) Cursor = Cursors.SizeNWSE;
