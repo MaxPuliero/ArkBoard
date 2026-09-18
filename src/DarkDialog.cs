@@ -28,7 +28,7 @@ namespace ArkBoard
             var heading = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 45, 0) };
             header.Children.Add(heading);
             var x = FlatButton("×"); x.Width = 42; x.HorizontalAlignment = HorizontalAlignment.Right;
-            x.Click += delegate { window.DialogResult = null; window.Close(); }; header.Children.Add(x);
+            x.Click += delegate { window.Close(); }; header.Children.Add(x);
             header.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e) { if (e.ChangedButton == MouseButton.Left) window.DragMove(); };
             layout.Children.Add(header);
             var body = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, LineHeight = 21,
@@ -37,7 +37,7 @@ namespace ArkBoard
             buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 7, 16, 10) };
             Grid.SetRow(buttons, 2); layout.Children.Add(buttons);
-            window.PreviewKeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Escape) { window.DialogResult = null; window.Close(); } };
+            window.PreviewKeyDown += delegate(object s, KeyEventArgs e) { if (e.Key == Key.Escape) window.Close(); };
             return window;
         }
 
@@ -69,6 +69,28 @@ namespace ArkBoard
             buttons.Children.Add(github);
             Button close = FlatButton(Localization.T("Close")); close.Click += delegate { window.DialogResult = true; }; buttons.Children.Add(close);
             window.ShowDialog();
+        }
+
+        internal static void ShowNotice(Window owner, string title, string message)
+        {
+            StackPanel buttons; Window window = Create(owner, title, message, out buttons); window.Width = 440;
+            Button close = FlatButton(Localization.T("Close")); close.Click += delegate { window.DialogResult = true; }; buttons.Children.Add(close);
+            window.ShowDialog();
+        }
+
+        internal static void ShowUpdate(Window owner, Version current, UpdateInfo update, Action downloadAction)
+        {
+            string message = string.Format(Localization.T("ArkBoard {0} is available. You are using {1}."), update.Version, current);
+            StackPanel buttons; Window window = Create(owner, Localization.T("Update available"), message, out buttons);
+            Button download = FlatButton(Localization.T("Download"));
+            download.Click += delegate
+            {
+                window.Close();
+                if (downloadAction != null) downloadAction();
+            };
+            buttons.Children.Add(download);
+            Button close = FlatButton(Localization.T("Close")); close.Click += delegate { window.Close(); }; buttons.Children.Add(close);
+            window.Show();
         }
     }
 }

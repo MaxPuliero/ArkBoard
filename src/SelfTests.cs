@@ -471,6 +471,23 @@ namespace ArkBoard
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             Check(window.snappingItem != null && window.snappingItem.IsCheckable && !window.snappingItem.IsChecked && !window.Board.Snapping,
                 "Settings exposes snapping as an opt-in toggle");
+            Check(window.updateCheckItem != null && window.updateCheckItem.IsCheckable && window.updateCheckItem.IsChecked && window.CheckForUpdatesEnabled &&
+                MainWindow.ParseUpdatePreference("checkForUpdates=false") == false && MainWindow.ParseUpdatePreference("invalid=true"),
+                "Automatic update checking defaults on and its persisted preference parser is defensive");
+            Grid updateControl = window.updateCheckItem.Header as Grid;
+            Check(updateControl != null && window.updateCheckButton != null &&
+                updateControl.Children.OfType<TextBlock>().Any(label => (string)label.Tag == "Auto-Check for Updates") &&
+                (string)window.updateCheckButton.Tag == "Check",
+                "Update settings separate the automatic startup toggle from the manual Check button");
+            CaptureElement(updateControl, Path.Combine(folder, "ui-update-setting.png"));
+            Check(UpdateChecker.ParseVersionTag("v1.17.2") == new Version(1, 17, 2) && UpdateChecker.ParseVersionTag("invalid") == null,
+                "GitHub release tags are parsed into comparable application versions");
+            byte[] releaseJson = Encoding.UTF8.GetBytes("{\"tag_name\":\"v9.1.0\",\"assets\":[{\"name\":\"ArkBoard.exe\",\"browser_download_url\":\"https://github.com/MaxPuliero/ArkBoard/releases/download/v9.1.0/ArkBoard.exe\"}]}");
+            UpdateInfo release = UpdateChecker.ParseRelease(releaseJson, new Version(1, 16, 0));
+            Check(release != null && release.Version == new Version(9, 1, 0) && release.FileName == "ArkBoard.exe" &&
+                UpdateChecker.IsTrustedDownloadUrl(release.DownloadUrl) &&
+                !UpdateChecker.IsTrustedDownloadUrl("https://example.com/ArkBoard.exe"),
+                "Update checks select the direct ArkBoard release asset and reject untrusted downloads");
             Check(window.paddingItem != null && window.paddingBox != null && window.paddingBox.Text == "4" && window.paddingItem.Header is Grid,
                 "Settings shows the inline shared snapping and packing padding control");
             Grid paddingControl = (Grid)window.paddingItem.Header;
@@ -492,6 +509,13 @@ namespace ArkBoard
             window.snappingContextItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Check(window.paddingContextItem != null && window.paddingContextBox.Text == window.paddingBox.Text,
                 "The context Settings copy exposes the shared Image Padding control");
+            Check(window.updateCheckContextButton != null && window.updateCheckContextItem.Header is Grid,
+                "The context Settings copy exposes the manual update check button");
+            window.updateCheckContextItem.IsChecked = false;
+            window.updateCheckContextItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(!window.CheckForUpdatesEnabled && !window.updateCheckItem.IsChecked,
+                "The context update preference stays synchronized with the main Settings toggle");
+            window.SetUpdateChecking(true);
             window.OpenProject(beeV2Path);
             Check(window.Document.Items.Count == 2 && window.Document.Path == null && window.Document.Dirty,
                 "Open Project routes BeeRef files through read-only conversion instead of native project loading");
@@ -619,7 +643,7 @@ namespace ArkBoard
             MenuItem[] contextSections = window.Board.ContextMenu.Items.OfType<MenuItem>().ToArray();
             Check(contextSections.Length == 5 && contextSections.Select(item => (string)item.Tag).SequenceEqual(new[] { "_File", "_Edit", "_View", "_Settings", "_Help" }) &&
                 contextSections[0].Items.Count == 9 && contextSections[1].Items.Count == 16 && contextSections[2].Items.Count == 7 &&
-                contextSections[3].Items.Count == 5 && contextSections[4].Items.Count == 1,
+                contextSections[3].Items.Count == 6 && contextSections[4].Items.Count == 1,
                 "The canvas context menu mirrors every top-level menu-bar section and command group");
             CaptureContextMenu(window, Path.Combine(folder, "ui-context-menu.png"));
             Point stableScreen = window.Board.ToScreen(new Point(wi[0].X, wi[0].Y));

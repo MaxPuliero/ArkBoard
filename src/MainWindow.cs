@@ -47,14 +47,17 @@ namespace ArkBoard
         MenuItem undoMenuItem, redoMenuItem;
         MenuItem topmostItem, topmostContextItem, gridItem, gridContextItem;
         MenuItem autoSortingItem, autoSortingContextItem, invertDragZoomItem, invertDragZoomContextItem, languageMenu;
+        internal MenuItem updateCheckItem, updateCheckContextItem;
+        internal Button updateCheckButton, updateCheckContextButton;
         internal MenuItem openRecentItem;
         internal MenuItem openRecentContextItem;
         internal MenuItem snappingItem, snappingContextItem, paddingItem, paddingContextItem;
         internal TextBox paddingBox, paddingContextBox;
         TextBlock paddingLabel, paddingContextLabel;
         internal readonly List<MenuItem> languageItems = new List<MenuItem>();
-        bool busy, saving, locked, minimalUi;
+        bool busy, saving, locked, minimalUi, checkingUpdates;
         bool testMode;
+        internal bool CheckForUpdatesEnabled = true;
         internal readonly List<string> recentProjects = new List<string>();
         sealed class ProjectLoad
         {
@@ -68,7 +71,7 @@ namespace ArkBoard
         public MainWindow(bool testing)
         {
             testMode = testing;
-            LoadRecentProjects();
+            LoadRecentProjects(); LoadPreferences();
             Title = "ArkBoard"; Width = 1280; Height = 820; MinWidth = 900; MinHeight = 600;
             using (Stream icon = typeof(MainWindow).Assembly.GetManifestResourceStream("ArkBoard.AppIcon"))
             {
@@ -101,6 +104,7 @@ namespace ArkBoard
             LocationChanged += delegate { PositionLockControls(); };
             SizeChanged += delegate { PositionLockControls(); };
             StateChanged += delegate { PositionLockControls(); };
+            Loaded += async delegate { if (!testMode && CheckForUpdatesEnabled) await CheckForUpdatesAtStartup(); };
             Closed += delegate { LockControlsWindow old = lockControlsWindow; lockControlsWindow = null; if (old != null && old.IsVisible) old.Close(); };
             Closing += delegate(object s, System.ComponentModel.CancelEventArgs e) { if (!testMode && (busy || saving || !ConfirmDiscard())) e.Cancel = true; };
             SourceInitialized += delegate
@@ -379,6 +383,7 @@ namespace ArkBoard
             invertDragZoomItem = MenuHeader("Invert Zoom"); invertDragZoomItem.IsCheckable = true;
             invertDragZoomItem.Click += delegate { SetInvertZoom(invertDragZoomItem.IsChecked); };
             settings.Items.Add(invertDragZoomItem);
+            updateCheckItem = BuildUpdateSetting(); settings.Items.Add(updateCheckItem);
             languageMenu = MenuHeader("Language"); settings.Items.Add(languageMenu);
             AddLanguage(languageMenu, "English", UiLanguage.English);
             AddLanguage(languageMenu, "Italiano", UiLanguage.Italian);
@@ -631,6 +636,7 @@ namespace ArkBoard
             paddingContextItem = BuildPaddingSetting(true); settings.Items.Add(paddingContextItem);
             invertDragZoomContextItem = MenuHeader("Invert Zoom"); invertDragZoomContextItem.IsCheckable = true; invertDragZoomContextItem.IsChecked = Board.InvertDragZoom;
             invertDragZoomContextItem.Click += delegate { SetInvertZoom(invertDragZoomContextItem.IsChecked); }; settings.Items.Add(invertDragZoomContextItem);
+            updateCheckContextItem = BuildUpdateSetting(true); settings.Items.Add(updateCheckContextItem);
             MenuItem contextLanguage = MenuHeader("Language"); settings.Items.Add(contextLanguage);
             AddLanguage(contextLanguage, "English", UiLanguage.English);
             AddLanguage(contextLanguage, "Italiano", UiLanguage.Italian);
@@ -662,6 +668,13 @@ namespace ArkBoard
         {
             Board.InvertDragZoom = value; invertDragZoomItem.IsChecked = value;
             if (invertDragZoomContextItem != null) invertDragZoomContextItem.IsChecked = value;
+        }
+        internal void SetUpdateChecking(bool value)
+        {
+            CheckForUpdatesEnabled = value;
+            if (updateCheckItem != null) updateCheckItem.IsChecked = value;
+            if (updateCheckContextItem != null) updateCheckContextItem.IsChecked = value;
+            SavePreferences();
         }
         internal bool MinimalUi { get { return minimalUi; } }
         internal void SetMinimalUi(bool value)
@@ -940,6 +953,23 @@ namespace ArkBoard
             Button up = PaddingArrow("▶", 1, box); Grid.SetColumn(up, 3); row.Children.Add(up);
             item.Header = row; return item;
         }
+        MenuItem BuildUpdateSetting(bool context = false)
+        {
+            var item = new MenuItem { IsCheckable = true, IsChecked = CheckForUpdatesEnabled, StaysOpenOnClick = true };
+            var row = new Grid { Width = 270 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock { Text = Localization.T("Auto-Check for Updates"), Tag = "Auto-Check for Updates",
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+            row.Children.Add(label);
+            var check = new Button { Content = Localization.T("Check"), Tag = "Check", MinWidth = 58, Height = 25,
+                Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(4, 0, 0, 0) };
+            Grid.SetColumn(check, 1); row.Children.Add(check);
+            check.Click += delegate(object sender, RoutedEventArgs e) { e.Handled = true; CheckForUpdatesManual(); };
+            item.Click += delegate { SetUpdateChecking(item.IsChecked); };
+            if (context) updateCheckContextButton = check; else updateCheckButton = check;
+            item.Header = row; return item;
+        }
         Button PaddingArrow(string glyph, double delta, TextBox target)
         {
             var button = new Button { Content = glyph, Width = 22, MinWidth = 0, Height = 24, Padding = new Thickness(0),
@@ -962,6 +992,99 @@ namespace ArkBoard
         }
         static string RecentProjectsPath
         { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArkBoard", "recent-projects.txt"); } }
+        static string PreferencesPath
+        { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ArkBoard", "settings.ini"); } }
+        internal static bool ParseUpdatePreference(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            foreach (string line in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] pair = line.Split(new[] { '=' }, 2);
+                bool value;
+                if (pair.Length == 2 && pair[0].Trim().Equals("checkForUpdates", StringComparison.OrdinalIgnoreCase) &&
+                    bool.TryParse(pair[1].Trim(), out value)) return value;
+            }
+            return true;
+        }
+        void LoadPreferences()
+        {
+            if (testMode) return;
+            try { if (File.Exists(PreferencesPath)) CheckForUpdatesEnabled = ParseUpdatePreference(File.ReadAllText(PreferencesPath)); }
+            catch { CheckForUpdatesEnabled = true; }
+        }
+        void SavePreferences()
+        {
+            if (testMode) return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(PreferencesPath));
+                File.WriteAllText(PreferencesPath, "checkForUpdates=" + CheckForUpdatesEnabled.ToString().ToLowerInvariant());
+            }
+            catch { }
+        }
+        async Task CheckForUpdatesAtStartup()
+        {
+            try
+            {
+                Version current = typeof(MainWindow).Assembly.GetName().Version;
+                UpdateInfo update = await UpdateChecker.CheckAsync(current);
+                if (update != null && CheckForUpdatesEnabled && IsVisible)
+                    DarkDialog.ShowUpdate(this, current, update, delegate { BeginUpdateDownload(update); });
+            }
+            catch { }
+        }
+        async void CheckForUpdatesManual()
+        {
+            if (checkingUpdates || busy || saving) return;
+            checkingUpdates = true; SetUpdateButtonsEnabled(false); ShowActivity("Checking for updates...", 0);
+            try
+            {
+                Version current = typeof(MainWindow).Assembly.GetName().Version;
+                UpdateInfo update = await UpdateChecker.CheckAsync(current); HideActivity();
+                if (update == null)
+                    DarkDialog.ShowNotice(this, Localization.T("No updates available"), Localization.T("You are using the latest version of ArkBoard."));
+                else await PromptAndDownloadUpdate(update);
+            }
+            catch
+            {
+                HideActivity();
+                DarkDialog.ShowNotice(this, Localization.T("Unable to check for updates"), Localization.T("Check your internet connection and try again."));
+            }
+            finally { checkingUpdates = false; SetUpdateButtonsEnabled(true); }
+        }
+        async void BeginUpdateDownload(UpdateInfo update) { await PromptAndDownloadUpdate(update); }
+        async Task PromptAndDownloadUpdate(UpdateInfo update)
+        {
+            if (update == null || !UpdateChecker.IsTrustedDownloadUrl(update.DownloadUrl))
+            {
+                DarkDialog.ShowNotice(this, Localization.T("Unable to download update"), Localization.T("The release does not contain an ArkBoard download."));
+                return;
+            }
+            string extension = Path.GetExtension(update.FileName ?? "ArkBoard.exe");
+            var dialog = new SaveFileDialog { Title = Localization.T("Save ArkBoard update"), FileName = update.FileName ?? "ArkBoard.exe",
+                AddExtension = true, DefaultExt = extension,
+                Filter = string.Equals(extension, ".zip", StringComparison.OrdinalIgnoreCase) ? "Portable ZIP|*.zip|All files|*.*" : "ArkBoard executable|*.exe|All files|*.*" };
+            if (dialog.ShowDialog(this) != true) return;
+            busy = true; Board.FinishGesture(); Board.IsEnabled = false; ShowActivity("Downloading update...", 0);
+            try
+            {
+                var progress = new Progress<double>(value => saveProgress.Value = Math.Max(0, Math.Min(100, value * 100)));
+                await UpdateChecker.DownloadAsync(update, dialog.FileName, progress); HideActivity();
+                DarkDialog.ShowNotice(this, Localization.T("Update downloaded"),
+                    string.Format(Localization.T("ArkBoard {0} was saved to:\n{1}"), update.Version, dialog.FileName));
+            }
+            catch
+            {
+                HideActivity();
+                DarkDialog.ShowNotice(this, Localization.T("Unable to download update"), Localization.T("Check your internet connection and try again."));
+            }
+            finally { busy = false; Board.IsEnabled = true; Board.Focus(); }
+        }
+        void SetUpdateButtonsEnabled(bool value)
+        {
+            if (updateCheckButton != null) updateCheckButton.IsEnabled = value;
+            if (updateCheckContextButton != null) updateCheckContextButton.IsEnabled = value;
+        }
         void LoadRecentProjects()
         {
             if (testMode) return;
@@ -1303,11 +1426,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.16.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.17.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.16.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.17.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.16.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.17.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

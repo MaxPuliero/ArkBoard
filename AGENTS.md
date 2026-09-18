@@ -15,6 +15,7 @@ ArkBoard is a portable x64 WPF application for Windows 10/11, built with the .NE
 - `src/TextEditing.cs`: canvas text creation and editing overlay.
 - `src/Localization.cs`: runtime English, Italian and Japanese translations.
 - `src/DarkDialog.cs`: ArkBoard-styled modal windows.
+- `src/UpdateChecker.cs`: GitHub release discovery, trusted asset selection and streamed update downloads.
 - `src/SelfTests.cs`: integration tests and screenshot generation.
 - `build.ps1`: portable release build. `Register-ArkBoard.ps1` registers the `.arkboard` icon and file association for the current user.
 
@@ -27,6 +28,8 @@ Normal saves use `BoardDocument.SaveAsync`: capture an immutable manifest/asset 
 Keep **Open** and **Open Recent** as separate commands. Open Recent appears in both the File menu and the canvas context menu. Keep the most recent ten valid paths, most recent first, in `%APPDATA%\ArkBoard\recent-projects.txt`; tests must not read or write this user file.
 
 The canvas context menu mirrors all five top-level menu-bar sections and their commands. Keep its checkable View and Settings entries synchronized with the main menu so minimal UI mode never hides functionality.
+
+The startup update check queries GitHub's latest-release API asynchronously with a short timeout and fails silently when offline. It must never delay the main window. The synchronized **Auto-Check for Updates** setting defaults on and persists as `checkForUpdates` in `%APPDATA%\ArkBoard\settings.ini`; its adjacent **Check** button performs a manual check, reports when the app is current, and downloads the trusted release asset through a Windows Save dialog. Self-tests must not access the real preference file.
 
 Keep the assembly version, build default directory, README version and release filename aligned. Preserve existing `.arkboard` manifests unless a feature requires a new schema version. Projects are ZIP archives with embedded source assets; PSD visibility is stored per canvas item.
 
