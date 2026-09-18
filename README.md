@@ -75,7 +75,7 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 
 - The eye button beside Opacity toggles **Always on Top**. The lock button makes the rest of ArkBoard click-through, allowing direct work in an application such as ZBrush beneath a translucent reference board.
 - While locked, the opacity controls and lock button remain interactive. The eye intentionally stays locked with the rest of the window until the board is unlocked.
-- Quick Controls now includes every implemented editing, project and navigation shortcut. Double-clicking empty canvas space continues to fit all board content.
+- Quick Controls now includes every implemented editing, project and navigation shortcut. Double-clicking an image selects and fits it; double-clicking empty canvas space fits all board content.
 
 ## PSD compositing fix in 1.9.1
 
@@ -86,7 +86,7 @@ ArkBoard is open-source software released under the [MIT License](LICENSE). Preb
 
 - **Settings → Language** switches the interface immediately between English, Italian and Japanese.
 - **Alt + middle-button drag** zooms vertically. Down zooms in by default; **Settings → Invert Alt + Middle Drag Zoom** reverses it.
-- Double-clicking empty canvas space fits the complete board.
+- Double-clicking an image selects and fits it. Double-clicking empty canvas space fits the complete board.
 - PSD layer names follow Photoshop's visual stacking order. A selected layered image uses a double outline so it remains easy to identify.
 - Help and the unsaved-changes confirmation now use ArkBoard's dark square-edged UI. Help presents compatible files, Windows support, the MIT license and the GitHub repository without a shortcut list.
 - Quick Controls and Layers use square outline-only expanders. `AGENTS.md` records architecture, build and release context for future development sessions.
@@ -182,7 +182,7 @@ To mask an image, hover it and hold **Shift** to reveal the small handles center
 
 Ctrl+click adds/removes images from the selection. Drag empty canvas space for a selection rectangle. The side panel appears only when an image is selected. Its controls apply to all selected images; transform handles are shown for a single selection.
 
-Scroll to zoom under the cursor. Space+drag or middle-button drag pans the canvas. Alt+middle-button drag zooms vertically; dragging down zooms in by default, and the Settings toggle reverses that direction. Double-click empty canvas space to fit the complete board. **View → Always on Top** keeps the window above other applications.
+Scroll to zoom under the cursor. Space+drag or middle-button drag pans the canvas. Alt+middle-button drag zooms vertically; dragging down zooms in by default, and the Settings toggle reverses that direction. Double-click an image to select and fit it, or double-click empty canvas space to fit the complete board. **View → Always on Top** keeps the window above other applications.
 
 The bottom **Opacity** slider changes the entire window, including images and the title bar, from 100% to 5%. The **100%** button or **Ctrl+Shift+0** restores full opacity while the application is active. Opacity resets to 100% at startup and is not saved into projects.
 
@@ -206,7 +206,7 @@ The bottom **Opacity** slider changes the entire window, including images and th
 | Flip horizontally / vertically | H / V |
 | Rotate +15 / −15 degrees | R / Shift+R |
 | Move selection by 1 / 10 units | Arrows / Shift+arrows |
-| Fit all / Fit selection | F / Shift+F |
+| Fit selection / all | F (selection when present, otherwise all) |
 | Zoom 100% / Increase / Decrease | 1 / + / − |
 | Bring to front / Send to back | ] / [ |
 | Restore 100% opacity | Ctrl+Shift+0 |

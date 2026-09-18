@@ -356,8 +356,8 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
             edit.Items.Add(MenuAction("Delete Selection", "Del", DeleteSelection));
             MenuItem view = MenuHeader("_View"); menu.Items.Add(view);
-            view.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
-            view.Items.Add(MenuAction("Fit Selection", "Shift+F", () => Board.Fit(true)));
+            view.Items.Add(MenuAction("Fit Selection / All", "F", () => Board.Fit(Document.Selected.Count > 0)));
+            view.Items.Add(MenuAction("Fit All", "", () => Board.Fit(false)));
             view.Items.Add(MenuAction("Zoom 100%", "1", () => Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1)));
             view.Items.Add(MenuAction("Opacity 100%", "Ctrl+Shift+0", () => SetWindowOpacity(100)));
             showUiItem = MenuHeader("Show UI"); showUiItem.IsCheckable = true; showUiItem.IsChecked = true; showUiItem.InputGestureText = "Tab";
@@ -446,7 +446,7 @@ namespace ArkBoard
             quickPanel.Children.Add(QuickControl("Alt+S / R / M", "Reset scale / rotation / mask"));
             quickPanel.Children.Add(QuickControl("Ctrl+A / Ctrl+P", "Normalize / pack"));
             quickPanel.Children.Add(QuickControl("A", "Select / deselect all"));
-            quickPanel.Children.Add(QuickControl("F / Shift+F", "Fit all / selection"));
+            quickPanel.Children.Add(QuickControl("F", "Fit selection / all"));
             quickPanel.Children.Add(QuickControl("Ctrl+N / O / S", "New / open / save"));
             quickPanel.Children.Add(QuickControl("Ctrl+Shift+S", "Save as"));
             quickPanel.Children.Add(QuickControl("Ctrl+I / V", "Import / paste"));
@@ -616,8 +616,8 @@ namespace ArkBoard
             edit.Items.Add(MenuAction("Reset Mask", "Alt+M", RemoveMask));
             edit.Items.Add(MenuAction("Delete Selection", "Del", DeleteSelection));
             MenuItem view = MenuHeader("_View"); menu.Items.Add(view);
-            view.Items.Add(MenuAction("Fit All", "F", () => Board.Fit(false)));
-            view.Items.Add(MenuAction("Fit Selection", "Shift+F", () => Board.Fit(true)));
+            view.Items.Add(MenuAction("Fit Selection / All", "F", () => Board.Fit(Document.Selected.Count > 0)));
+            view.Items.Add(MenuAction("Fit All", "", () => Board.Fit(false)));
             view.Items.Add(MenuAction("Zoom 100%", "1", () => Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1)));
             view.Items.Add(MenuAction("Opacity 100%", "Ctrl+Shift+0", () => SetWindowOpacity(100)));
             showUiContextItem = MenuHeader("Show UI"); showUiContextItem.IsCheckable = true; showUiContextItem.IsChecked = !minimalUi;
@@ -1405,7 +1405,7 @@ namespace ArkBoard
                     case Key.Escape: Board.FinishGesture(); Board.CancelMaskEditing(); Document.Selected.Clear(); Document.Notify(); break;
                     case Key.H: Flip(true); break; case Key.V: Flip(false); break;
                     case Key.R: Rotate(shift ? -15 : 15); break;
-                    case Key.F: Board.Fit(shift); break;
+                    case Key.F: Board.Fit(Document.Selected.Count > 0 || shift); break;
                     case Key.D1: Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), 1); break;
                     case Key.OemPlus: case Key.Add: Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), Document.Zoom * 1.2); break;
                     case Key.OemMinus: case Key.Subtract: Board.ZoomAt(new Point(Board.ActualWidth / 2, Board.ActualHeight / 2), Document.Zoom / 1.2); break;

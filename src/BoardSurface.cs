@@ -137,6 +137,15 @@ namespace ArkBoard
             if (clickCount != 2 || Hit(screen) != null) return false;
             Fit(false); return true;
         }
+        internal bool FitOnImageDoubleClick(Point screen, int clickCount)
+        {
+            if (clickCount != 2) return false;
+            ImageItem item = Hit(screen);
+            if (item == null || item.IsText) return false;
+            if (Document.Selected.Count != 1 || !Document.Selected.Contains(item.Id))
+            { Document.Selected.Clear(); Document.Selected.Add(item.Id); Document.Notify(); }
+            Fit(true); return true;
+        }
         internal Point[] RotationHandles(ImageItem item)
         {
             return RotationHandles(item.Corners().Select(ToScreen).ToArray());
@@ -562,6 +571,7 @@ namespace ArkBoard
             }
             if (e.ChangedButton != MouseButton.Left) return;
             if (e.ClickCount == 2 && TryEditTextAt(startScreen)) { e.Handled = true; return; }
+            if (FitOnImageDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             if (FitOnEmptyDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
             if (!shiftDown) MaskEditingId = null;
