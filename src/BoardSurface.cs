@@ -23,6 +23,7 @@ namespace ArkBoard
         internal string HoveredImageId;
         public event Action ViewChanged;
         internal bool TextToolArmed;
+        internal bool ScreenGrabPlacementArmed;
         internal bool TextInputActive;
         internal string EditingTextId;
         internal string MaskEditingId;
@@ -36,6 +37,9 @@ namespace ArkBoard
         readonly DrawingBrush gridTile;
         readonly DispatcherTimer settleTimer;
         static readonly Cursor rotateCursor = LoadRotateCursor();
+        static readonly Geometry rotationAnchorGeometry = CreateRotationAnchorGeometry();
+        static readonly Geometry distantRotationAnchorGeometry = CreateDistantRotationAnchorGeometry();
+        static readonly Brush rotationAnchorBrush = new SolidColorBrush(Color.FromRgb(235, 235, 235));
         string gesture;
         Point startScreen, startWorld, lastScreen;
         Dictionary<string, ImageItem> originals;
@@ -86,6 +90,32 @@ namespace ArkBoard
             Stream stream = typeof(BoardSurface).Assembly.GetManifestResourceStream("ArkBoard.RotateCursor");
             if (stream == null) return Cursors.Hand;
             using (stream) return new Cursor(stream);
+        }
+        static Geometry CreateRotationAnchorGeometry()
+        {
+            // The three filled paths and matrices from assets/rotate.svg (viewBox 624 x 624).
+            var group = new GeometryGroup();
+            Geometry arc = Geometry.Parse("M512,976.489 L512,957.91 C758.269,957.91 957.91,758.269 957.91,512 L976.489,512 C976.489,768.53 768.53,976.489 512,976.489 Z").Clone();
+            arc.Transform = new MatrixTransform(0, -.996509, .996509, 0, -374.834144, 998.834144);
+            Geometry firstArrow = Geometry.Parse("M426.5,306 L495,443 L358,443 Z").Clone();
+            firstArrow.Transform = new MatrixTransform(0, -.547445, 1, 0, -306, 270.985401);
+            Geometry secondArrow = Geometry.Parse("M426.5,306 L495,443 L358,443 Z").Clone();
+            secondArrow.Transform = new MatrixTransform(-.547445, 0, 0, -1, 819.985401, 930);
+            group.Children.Add(arc); group.Children.Add(firstArrow); group.Children.Add(secondArrow);
+            group.Freeze(); return group;
+        }
+        static Geometry CreateDistantRotationAnchorGeometry()
+        {
+            // Top-side artwork from assets/rotate_distant.svg (viewBox 790 x 310).
+            var group = new GeometryGroup();
+            Geometry arc = Geometry.Parse("M835.602,307.27 L803.445,325.836 C736.935,210.638 614.02,139.673 481,139.673 C347.98,139.673 225.065,210.638 158.555,325.836 L126.398,307.27 C199.541,180.583 334.714,102.541 481,102.541 C627.286,102.541 762.459,180.583 835.602,307.27 Z").Clone();
+            arc.Transform = new MatrixTransform(1, 0, 0, 1, -86, -102);
+            Geometry leftArrow = Geometry.Parse("M140.617,256.96 L189,374 L92.234,374 Z").Clone();
+            leftArrow.Transform = new MatrixTransform(-.866025, -.5, .5, -.866025, -5.912436, 602.182933);
+            Geometry rightArrow = Geometry.Parse("M140.617,256.96 L189,374 L92.234,374 Z").Clone();
+            rightArrow.Transform = new MatrixTransform(.866025, -.5, -.5, -.866025, 795.912443, 602.182933);
+            group.Children.Add(arc); group.Children.Add(leftArrow); group.Children.Add(rightArrow);
+            group.Freeze(); return group;
         }
         internal void ArmTextTool()
         {
@@ -174,7 +204,7 @@ namespace ArkBoard
                     Vector outward = new Vector(side.Y, -side.X);
                     if (outward.Length > .001) outward.Normalize();
                     if (Vector.Multiply(outward, midpoint - center) < 0) outward *= -1;
-                    handles[index] = midpoint + outward * 28;
+                    handles[index] = midpoint + outward * 14;
                 }
                 return handles;
             }
@@ -228,16 +258,45 @@ namespace ArkBoard
             for (int index = 0; index < handles.Length; index++) if ((handles[index] - screen).Length <= 14) return index;
             return -1;
         }
-        void DrawRotationAnchor(DrawingContext dc, Point center, Pen pen, double radius)
+        internal static Matrix RotationAnchorTransform(Point[] corners, Point center, double radius, int index)
         {
-            Point start = new Point(center.X + radius, center.Y);
-            Point end = new Point(center.X, center.Y - radius);
-            var figure = new PathFigure { StartPoint = start, IsClosed = false };
-            figure.Segments.Add(new ArcSegment(end, new Size(radius, radius), 0, true, SweepDirection.Clockwise, true));
-            var geometry = new PathGeometry(new[] { figure });
-            dc.DrawGeometry(null, pen, geometry);
-            dc.DrawLine(pen, end, new Point(end.X - radius / 2, end.Y + radius / 8));
-            dc.DrawLine(pen, end, new Point(end.X + radius / 8, end.Y + radius / 2));
+            Vector horizontal = corners[1] - corners[0];
+            Vector vertical = corners[3] - corners[0];
+            if (horizontal.Length < .001) horizontal = new Vector(1, 0); else horizontal.Normalize();
+            if (vertical.Length < .001) vertical = new Vector(0, 1); else vertical.Normalize();
+            // rotate.svg is authored for the top-right corner.
+            double xSign = index == 0 || index == 3 ? -1 : 1;
+            double ySign = index == 2 || index == 3 ? -1 : 1;
+            double scale = radius / 312;
+            double m11 = scale * xSign * horizontal.X, m12 = scale * xSign * horizontal.Y;
+            double m21 = scale * ySign * vertical.X, m22 = scale * ySign * vertical.Y;
+            return new Matrix(m11, m12, m21, m22,
+                center.X - 312 * (m11 + m21), center.Y - 312 * (m12 + m22));
+        }
+        internal static Matrix DistantRotationAnchorTransform(Point[] corners, Point center, int index)
+        {
+            Vector horizontal = corners[1] - corners[0];
+            Vector vertical = corners[3] - corners[0];
+            if (horizontal.Length < .001) horizontal = new Vector(1, 0); else horizontal.Normalize();
+            if (vertical.Length < .001) vertical = new Vector(0, 1); else vertical.Normalize();
+            Vector tangent = index == 0 || index == 2 ? horizontal : vertical;
+            Vector inward = index == 0 ? vertical : index == 1 ? -horizontal : index == 2 ? -vertical : horizontal;
+            const double width = 20;
+            double height = width * 310 / 790;
+            double m11 = tangent.X * width / 790, m12 = tangent.Y * width / 790;
+            double m21 = inward.X * height / 310, m22 = inward.Y * height / 310;
+            return new Matrix(m11, m12, m21, m22,
+                center.X - 395 * m11 - 155 * m21, center.Y - 395 * m12 - 155 * m22);
+        }
+        void DrawRotationAnchor(DrawingContext dc, Point center, Point[] corners, int index, double radius)
+        {
+            bool distant = UsesOuterRotationHandles(corners);
+            Geometry geometry = (distant ? distantRotationAnchorGeometry : rotationAnchorGeometry).Clone();
+            geometry.Transform = new MatrixTransform(distant
+                ? DistantRotationAnchorTransform(corners, center, index)
+                : RotationAnchorTransform(corners, center, radius, index));
+            dc.DrawGeometry(null, new Pen(background, 1), geometry);
+            dc.DrawGeometry(rotationAnchorBrush, null, geometry);
         }
         internal bool ShowsMoveCursor(ImageItem item)
         { return item != null && Document.Selected.Contains(item.Id); }
@@ -498,7 +557,11 @@ namespace ArkBoard
                             dc.DrawRectangle(background, pen, new Rect(midpoint.X - 3, midpoint.Y - 3, 6, 6));
                         }
                         if (selected && Document.Selected.Count == 1 && !maskControls)
-                            foreach (Point handle in RotationHandles(item)) DrawRotationAnchor(dc, handle, pen, RotationAnchorRadius(corners));
+                        {
+                            Point[] handles = RotationHandles(item);
+                            for (int index = 0; index < handles.Length; index++)
+                                DrawRotationAnchor(dc, handles[index], corners, index, RotationAnchorRadius(corners));
+                        }
                     }
                 }
             }
@@ -507,7 +570,9 @@ namespace ArkBoard
                 Point[] corners = GroupControlCorners(); Pen pen = new Pen(accent, 1.5);
                 for (int side = 0; side < 4; side++) dc.DrawLine(pen, corners[side], corners[(side + 1) % 4]);
                 foreach (Point corner in corners) dc.DrawRectangle(background, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
-                foreach (Point handle in GroupRotationHandles()) DrawRotationAnchor(dc, handle, pen, RotationAnchorRadius(corners));
+                Point[] handles = GroupRotationHandles();
+                for (int index = 0; index < handles.Length; index++)
+                    DrawRotationAnchor(dc, handles[index], corners, index, RotationAnchorRadius(corners));
             }
             if (snapGuides.Count > 0)
             {
@@ -665,7 +730,7 @@ namespace ArkBoard
                 bool previewChanged = ShiftPreview != shiftDown || HoveredImageId != hoveredId;
                 ShiftPreview = shiftDown; HoveredImageId = hoveredId;
                 if (previewChanged) InvalidateVisual();
-                if (TextToolArmed) { Cursor = Cursors.Cross; return; }
+                if (TextToolArmed || ScreenGrabPlacementArmed) { Cursor = Cursors.Cross; return; }
                 Cursor = SpaceDown ? Cursors.ScrollAll : ShowsMoveCursor(hovered) ? Cursors.SizeAll : Cursors.Arrow;
                 if (HasGroupTransformSelection)
                 {

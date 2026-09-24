@@ -426,6 +426,7 @@ namespace ArkBoard
             textToolButton.Background = Brush("#323232"); textToolButton.Foreground = Brush("#B0B0B0");
             System.Windows.Automation.AutomationProperties.SetName(textToolButton, "Text tool");
             Panel.SetZIndex(textToolButton, 20); area.Children.Add(textToolButton);
+            BuildScreenGrabButton(area);
             quickControlsExpander = new Expander { Header = Localization.T("QUICK CONTROLS"), Tag = "QUICK CONTROLS", IsExpanded = false, Foreground = secondary,
                 Background = Brush("#D9191919"), Padding = new Thickness(8), Width = 310,
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 0, 6) };
@@ -555,7 +556,7 @@ namespace ArkBoard
             status = Label("Ready · Drop an image to get started", 12, secondary); status.TextWrapping = TextWrapping.NoWrap; status.TextTrimming = TextTrimming.CharacterEllipsis;
             status.Margin = new Thickness(20, 0, 14, 0); status.VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(status);
             saveProgress = new ProgressBar { Minimum = 0, Maximum = 100, Width = 225, Height = 10,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 20),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 120),
                 Visibility = Visibility.Collapsed, IsHitTestVisible = false, Foreground = Brush("#88968B"), Background = Brush("#181818"), BorderThickness = new Thickness(0) };
             saveProgress.Template = (ControlTemplate)XamlReader.Parse(@"
 <ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='ProgressBar'>
@@ -686,6 +687,7 @@ namespace ArkBoard
             statusBar.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
             quickControlsExpander.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
             textToolButton.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            screenGrabButton.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
             if (showUiItem != null) showUiItem.IsChecked = !value;
             if (showUiContextItem != null) showUiContextItem.IsChecked = !value;
             SetStatus(value ? "UI hidden · Press Tab or right-click to show it" : "UI shown");
@@ -1361,6 +1363,8 @@ namespace ArkBoard
         { SetStatus(title); if (!testMode) MessageBox.Show(this, ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning); }
         void OnKey(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.Escape && pendingScreenGrab != null)
+            { CancelScreenGrabPlacement(); e.Handled = true; return; }
             if (HandleTextToolKey(e)) return;
             if (e.Key == Key.D0 && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
             { SetWindowOpacity(100); e.Handled = true; return; }
@@ -1426,11 +1430,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.17.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.18.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.17.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.18.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.17.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.18.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

@@ -338,6 +338,13 @@ namespace ArkBoard
                     Math.Abs((rotationHandles[k] - rotationCorners[k]).Length - Math.Sqrt(27 * 27 * 2)) < .001) &&
                     sortBoard.RotationHandleAt(sortFirst, rotationHandles[2]) == 2 && Near(BoardSurface.RotationAnchorRadius(rotationCorners), 8),
                 "Four inset rotation anchors stay clear of the corner scale handles and have generous hit targets");
+            Check(Enumerable.Range(0, 4).All(index =>
+            {
+                Point cornerOfIcon = BoardSurface.RotationAnchorTransform(rotationCorners, rotationHandles[index], 8, index)
+                    .Transform(new Point(0, 0));
+                return Near(cornerOfIcon.X - rotationHandles[index].X, index == 0 || index == 3 ? 8 : -8) &&
+                    Near(cornerOfIcon.Y - rotationHandles[index].Y, index >= 2 ? 8 : -8);
+            }), "Rotation icons mirror from the top-right source across the four anchors");
             Check(sortBoard.ShowsMoveCursor(sortFirst), "Selected images expose the movement cursor");
             sortDoc.Selected.Clear();
             Check(!sortBoard.ShowsMoveCursor(sortFirst), "Unselected images keep the normal pointer when hovered");
@@ -351,13 +358,21 @@ namespace ArkBoard
                 Point next = compactCorners[(index + 1) % 4];
                 Point midpoint = new Point((compactCorners[index].X + next.X) / 2, (compactCorners[index].Y + next.Y) / 2);
                 Vector offset = compactRotationHandles[index] - midpoint;
-                return Near(offset.Length, 28) && Vector.Multiply(offset, midpoint - compactCenter) > 0;
+                return Near(offset.Length, 14) && Vector.Multiply(offset, midpoint - compactCenter) > 0;
             });
             Check(BoardSurface.UsesOuterRotationHandles(compactCorners) && compactRotationHandles.Length == 4 && outerCenters &&
                 Near(BoardSurface.RotationAnchorRadius(compactCorners), 4) &&
                 sortBoard.RotationHandleAt(sortFirst, compactRotationHandles[0] + new Vector(13, 0)) == 0 &&
                 sortBoard.RotationHandleAt(sortFirst, compactCorners[0]) == -1,
                 "Small images use half-size outer rotation drawings while retaining the full hit area and clear scale corners");
+            Check(Enumerable.Range(0, 4).All(index =>
+            {
+                Point crown = BoardSurface.DistantRotationAnchorTransform(compactCorners, compactRotationHandles[index], index)
+                    .Transform(new Point(395, 0));
+                Vector outward = crown - compactRotationHandles[index];
+                Vector expected = compactRotationHandles[index] - compactCenter;
+                return Vector.Multiply(outward, expected) > 0;
+            }), "Distant rotation icons face outward on all four sides");
             sortDoc.Zoom = 1;
             var groupDoc = new BoardDocument();
             var groupFirst = new ImageItem { Id = "group-first", X = 0, Y = 0, Width = 100, Height = 50, FlipX = true, MaskLeft = .1 };
@@ -582,8 +597,9 @@ namespace ArkBoard
             Check(window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Collapsed,
                 "Tab minimal mode hides chrome while leaving the inspector workflow available");
             window.saveProgress.Value = 42; window.saveProgress.Visibility = Visibility.Visible;
-            Check(window.saveProgress.IsVisible && window.saveProgress.Width == 225 && window.saveProgress.Height == 10,
-                "The shared save/load progress overlay remains visible when application UI is hidden");
+            Check(window.saveProgress.IsVisible && window.saveProgress.Width == 225 && window.saveProgress.Height == 10 &&
+                Near(window.saveProgress.Margin.Bottom, 120),
+                "The shared save/load progress overlay stays visible 100 pixels higher when application UI is hidden");
             Capture(window, Path.Combine(folder, "ui-minimal-progress.png")); window.saveProgress.Visibility = Visibility.Collapsed;
             window.SetMinimalUi(false);
             Check(!window.MinimalUi && window.quickControlsExpander.Visibility == Visibility.Visible && !window.quickControlsExpander.IsExpanded,
@@ -656,6 +672,14 @@ namespace ArkBoard
             Check(window.Board.HasGroupTransformSelection && window.Board.GroupCorners().Length == 4,
                 "The live canvas exposes group transform controls for a multi-image selection");
             Capture(window, Path.Combine(folder, "ui-group-selection.png"));
+            double previewZoom = window.Document.Zoom, previewPanX = window.Document.PanX, previewPanY = window.Document.PanY;
+            window.Document.Zoom = .05; window.Document.PanX = window.Board.ActualWidth / 2 - 25;
+            window.Document.PanY = window.Board.ActualHeight / 2 - 15; window.Board.InvalidateVisual();
+            Check(BoardSurface.UsesOuterRotationHandles(window.Board.GroupCorners()),
+                "Compact group preview uses the distant rotation anchors");
+            Capture(window, Path.Combine(folder, "ui-distant-anchors.png"));
+            window.Document.Zoom = previewZoom; window.Document.PanX = previewPanX; window.Document.PanY = previewPanY;
+            window.Board.InvalidateVisual();
             double savedWidth = wi[0].Width, savedX = wi[0].X;
             window.ResetRotation();
             Check(Near(wi[0].Rotation, 0) && Near(wi[1].Rotation, 0) && Near(wi[2].Rotation, 5) &&
