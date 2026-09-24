@@ -11,7 +11,7 @@ namespace ArkBoard
 {
     public sealed partial class MainWindow
     {
-        Button screenGrabButton;
+        internal Button screenGrabButton;
         AssetData pendingScreenGrab;
         bool screenGrabRunning;
 
@@ -27,7 +27,9 @@ namespace ArkBoard
             drawing.Children.Add(new Path { Data = lens, Stroke = Brush("#D9D9D9"), StrokeThickness = 1.26 });
             drawing.Children.Add(new Path { Data = Geometry.Parse("M0.869,6.892 L32.131,6.892"), Stroke = Brush("#D9D9D9"), StrokeThickness = .67 });
             var icon = new Viewbox { Width = 24.3, Height = 18, Child = drawing };
-            screenGrabButton = Button("", StartScreenGrab, "Capture screen region · Click canvas to place · Esc to cancel");
+            screenGrabButton = new Button { ToolTip = "Capture screen region · Click canvas to place · Esc to cancel" };
+            // The shared Button helper refocuses Board after Click, which deactivates the capture overlay.
+            screenGrabButton.Click += delegate { if (!busy) StartScreenGrab(); };
             screenGrabButton.Content = icon; screenGrabButton.Padding = new Thickness(0);
             screenGrabButton.Width = 38; screenGrabButton.Height = 28;
             screenGrabButton.HorizontalAlignment = HorizontalAlignment.Left;

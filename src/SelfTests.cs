@@ -484,6 +484,12 @@ namespace ArkBoard
             var window = new MainWindow(true) { ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000 };
             window.Show();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            window.screenGrabButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            ScreenGrab grabOverlay = Application.Current.Windows.OfType<ScreenGrab>().FirstOrDefault();
+            Check(window.IsVisible && grabOverlay != null && grabOverlay.IsVisible,
+                "Screen capture button keeps ArkBoard visible and the capture overlay open");
+            grabOverlay.Close();
             Check(window.snappingItem != null && window.snappingItem.IsCheckable && !window.snappingItem.IsChecked && !window.Board.Snapping,
                 "Settings exposes snapping as an opt-in toggle");
             Check(window.updateCheckItem != null && window.updateCheckItem.IsCheckable && window.updateCheckItem.IsChecked && window.CheckForUpdatesEnabled &&

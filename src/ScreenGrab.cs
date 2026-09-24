@@ -49,7 +49,6 @@ namespace ArkBoard
             selection.StrokeDashArray = new DoubleCollection { 5, 3 };
             canvas.Children.Add(selection); Content = canvas;
             KeyDown += OnKeyDown;
-            Deactivated += delegate { if (!finished) Complete(null); };
             Closed += delegate { if (!finished) { finished = true; completed(null); } };
         }
 
