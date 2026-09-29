@@ -84,6 +84,7 @@ namespace ArkBoard
             Background = panel; Foreground = text; FontFamily = new FontFamily("Segoe UI"); FontSize = 13;
             ApplyStyles();
             Board = new BoardSurface(Document);
+            Board.ImageColorPicked += AddPickedColor;
             Content = Root; Root.Background = panel;
             Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             Root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -520,6 +521,7 @@ namespace ArkBoard
             Button duplicate = Button("Duplicate", Duplicate, "Duplicate · Ctrl+D");
             Button delete = Button("Delete", DeleteSelection, "Delete · Del"); delete.Margin = new Thickness(3, 0, 0, 0);
             Grid.SetColumn(delete, 1); operations.Children.Add(duplicate); operations.Children.Add(delete); properties.Children.Add(operations);
+            BuildColorPicker(properties);
             layersSeparator = new Border { Height = 1, Background = Brush("#393939"), Margin = new Thickness(0, 30, 0, 20) };
             properties.Children.Add(layersSeparator);
             layersExpander = new Expander { Header = Localization.T("LAYERS"), Tag = "LAYERS", Foreground = text, Margin = new Thickness(0, 0, 0, 4), IsExpanded = true };

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace ArkBoard
@@ -22,6 +23,7 @@ namespace ArkBoard
         internal bool ShiftPreview;
         internal string HoveredImageId;
         public event Action ViewChanged;
+        internal event Action<Color> ImageColorPicked;
         internal bool TextToolArmed;
         internal bool ScreenGrabPlacementArmed;
         internal bool TextInputActive;
@@ -152,6 +154,30 @@ namespace ArkBoard
         {
             Point world = ToWorld(screen);
             return Document.Items.LastOrDefault(i => i.Id != EditingTextId && i.Contains(world));
+        }
+        internal bool TrySampleImageColor(ImageItem item, Point world, out Color color)
+        {
+            color = Colors.Transparent;
+            if (item == null || item.IsText || !item.ContainsVisible(world)) return false;
+            AssetData asset;
+            if (!Document.Assets.TryGetValue(item.Asset, out asset)) return false;
+            BitmapSource bitmap = asset.BitmapFor(item);
+            Matrix inverse = item.Matrix; inverse.Invert();
+            Point local = inverse.Transform(world);
+            int x = (int)Math.Floor((local.X / item.Width + .5) * bitmap.PixelWidth);
+            int y = (int)Math.Floor((local.Y / item.Height + .5) * bitmap.PixelHeight);
+            if (x < 0 || y < 0 || x >= bitmap.PixelWidth || y >= bitmap.PixelHeight) return false;
+            BitmapSource pixel = new CroppedBitmap(bitmap, new Int32Rect(x, y, 1, 1));
+            var converted = new FormatConvertedBitmap(pixel, PixelFormats.Bgra32, null, 0);
+            byte[] bgra = new byte[4]; converted.CopyPixels(bgra, 4, 0);
+            color = Color.FromArgb(bgra[3], bgra[2], bgra[1], bgra[0]);
+            return true;
+        }
+        void PickImageColorAt(Point screen)
+        {
+            if (ImageColorPicked == null) return;
+            Color color;
+            if (TrySampleImageColor(Hit(screen), ToWorld(screen), out color)) ImageColorPicked(color);
         }
         internal bool TryEditTextAt(Point screen)
         {
@@ -636,6 +662,7 @@ namespace ArkBoard
             }
             if (e.ChangedButton != MouseButton.Left) return;
             if (e.ClickCount == 2 && TryEditTextAt(startScreen)) { e.Handled = true; return; }
+            if (e.ClickCount == 2) PickImageColorAt(startScreen);
             if (FitOnImageDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             if (FitOnEmptyDoubleClick(startScreen, e.ClickCount)) { e.Handled = true; return; }
             bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
@@ -703,6 +730,7 @@ namespace ArkBoard
                 bool add = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
                 if (hit != null)
                 {
+                    if (!hit.IsText) PickImageColorAt(startScreen);
                     if (add && Document.Selected.Contains(hit.Id))
                     { Document.Selected.Remove(hit.Id); Document.Notify(); e.Handled = true; return; }
                     if (!Document.Selected.Contains(hit.Id))

@@ -1,10 +1,16 @@
-# ArkBoard 1.18.1
+# ArkBoard 1.19.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Color Picker in 1.19.0
+
+- Click an image to sample the pixel under the pointer. The inspector stores up to eleven colors, filling empty swatches first and then replacing them from the beginning. Sampling respects image rotation, flips, masks and visible PSD layers.
+- Click a swatch to inspect that color. The active swatch has a white border; other swatches have gray borders. Toggle between HSL and RGBA readouts. The Hue, Saturation, Lightness, Alpha and RGB channel bars show their corresponding color ranges with thin position markers.
+- Click the hexadecimal color code to select it all for copying.
 
 ## Screen capture fix in 1.18.1
 
@@ -254,11 +260,11 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.18.1
-Start-Process .\dist-arkboard-1.18.1\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.18.1' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.19.0
+Start-Process .\dist-arkboard-1.19.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.19.0' -WindowStyle Hidden -Wait
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.18.1`; failures produce `FAILED.txt`. They cover update preference parsing and trusted GitHub release asset selection, atomic background saving and loading, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, adaptive rotation controls, masked-edge move and scale snapping with shared padding and Ctrl override, free-space packing density, width and height alignment, cursor-position paste, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity and normalization. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.19.0`; failures produce `FAILED.txt`. They cover color sampling through image transforms and masks, update preference parsing and trusted GitHub release asset selection, atomic background saving and loading, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, adaptive rotation controls, masked-edge move and scale snapping with shared padding and Ctrl override, free-space packing density, width and height alignment, cursor-position paste, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity and normalization. They do not modify user projects.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

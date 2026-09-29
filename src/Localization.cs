@@ -76,6 +76,7 @@ namespace ArkBoard
             { "Bring to Front", new[]{ "Bring to Front", "Porta in primo piano", "最前面へ" } },
             { "Send to Back", new[]{ "Send to Back", "Porta sul fondo", "最背面へ" } },
             { "LAYERS", new[]{ "LAYERS", "LIVELLI", "レイヤー" } },
+            { "Color Picker", new[]{ "Color Picker", "Selettore colore", "カラーピッカー" } },
             { "Opacity", new[]{ "Opacity", "Opacità", "不透明度" } },
             { "Close", new[]{ "Close", "Chiudi", "閉じる" } },
             { "Download", new[]{ "Download", "Scarica", "ダウンロード" } },

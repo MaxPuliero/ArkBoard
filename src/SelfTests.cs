@@ -217,6 +217,20 @@ namespace ArkBoard
             var psdDoc = new BoardDocument(); ImageItem psdItem = psdDoc.Add(psd, "Layers.psd", new Point(40, 40));
             Check(psdItem.LayerVisibility.SequenceEqual(new[] { true, true }) && Pixel(psd.BitmapFor(psdItem), 0, 0).R > 240,
                 "PSD import initializes Photoshop layer visibility and composites the top layer");
+            var pickerPixels = BitmapSource.Create(2, 1, 96, 96, PixelFormats.Bgra32, null,
+                new byte[] { 0, 0, 255, 255, 255, 0, 0, 255 }, 8);
+            var pickerDocument = new BoardDocument();
+            ImageItem pickerItem = pickerDocument.Add(AssetData.FromBitmap(pickerPixels), "picker.png", new Point(30, 40));
+            pickerItem.Rotation = 90; pickerItem.FlipX = true;
+            var pickerBoard = new BoardSurface(pickerDocument);
+            Color sampled;
+            Check(pickerBoard.TrySampleImageColor(pickerItem, pickerItem.Matrix.Transform(new Point(-.5, 0)), out sampled) &&
+                sampled.R == 255 && sampled.G == 0 && sampled.B == 0 &&
+                pickerBoard.TrySampleImageColor(pickerItem, pickerItem.Matrix.Transform(new Point(.5, 0)), out sampled) &&
+                sampled.B == 255, "Color picker reads source pixels through image rotation and flip");
+            pickerItem.MaskRight = .5;
+            Check(!pickerBoard.TrySampleImageColor(pickerItem, pickerItem.Matrix.Transform(new Point(.5, 0)), out sampled),
+                "Color picker ignores clicks in masked image areas");
             psdDoc.Change(() => psdItem.LayerVisibility[1] = false);
             Check(Pixel(psd.BitmapFor(psdItem), 0, 0).B > 240, "Turning off a PSD layer reveals the layer below it");
             psdDoc.Undo(); psdItem = psdDoc.Items.Single();
@@ -847,6 +861,19 @@ namespace ArkBoard
                 "PSD layers are listed in the same visual order as Photoshop");
             uiPsd.Width = 420; uiPsd.Height = 420; window.Document.Notify(); window.Board.Fit(false);
             Capture(window, Path.Combine(folder, "ui-psd-layers.png"));
+            for (int slot = 0; slot < 11; slot++)
+                window.AddPickedColor(Color.FromRgb((byte)(slot * 20), 80, 120));
+            Color previousSecond = window.pickedColors[1].Value;
+            window.AddPickedColor(Color.FromRgb(24, 94, 220));
+            Check(window.pickedColors[0].Value == Color.FromRgb(24, 94, 220) &&
+                window.pickedColors[1].Value == previousSecond && window.colorCode.Text == "#185EDC",
+                "Color picker fills eleven swatches, wraps to the first and shows the active hex code");
+            await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+            CaptureElement(window.colorPickerSection, Path.Combine(folder, "ui-color-picker-hsl.png"));
+            window.colorMode.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check((string)window.colorMode.Content == "RGBA" && window.colorCode.Text == "#185EDC",
+                "Color picker switches between HSL and RGBA without changing the sampled color");
+            CaptureElement(window.colorPickerSection, Path.Combine(folder, "ui-color-picker-rgba.png"));
             window.SetPsdLayerVisibility(uiPsd.Id, 1, false);
             Check(!uiPsd.LayerVisibility[1] && Pixel(psd.BitmapFor(uiPsd), 0, 0).B > 240,
                 "The inspector layer toggle updates the selected PSD instance");
