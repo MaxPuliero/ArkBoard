@@ -33,6 +33,7 @@ namespace ArkBoard
         [DataMember(EmitDefaultValue = false)] public double MaskRight;
         [DataMember(EmitDefaultValue = false)] public double MaskBottom;
         [DataMember(EmitDefaultValue = false)] public List<bool> LayerVisibility;
+        [DataMember(EmitDefaultValue = false)] public double Transparency;
         public bool IsText { get { return Text != null; } }
         public bool HasMask { get { return !IsText && (MaskLeft > 0 || MaskTop > 0 || MaskRight > 0 || MaskBottom > 0); } }
         public Rect VisibleRect
@@ -186,6 +187,7 @@ namespace ArkBoard
             if (undo.Count > 40) undo.RemoveAt(0);
             redo.Clear(); Dirty = true; revision++;
         }
+        internal void MarkChanged() { Dirty = true; revision++; }
         public void Change(Action action) { Checkpoint(); action(); CollectAssets(); Notify(); }
         public void Undo()
         {
@@ -250,7 +252,7 @@ namespace ArkBoard
             List<ImageItem> items = Clone(Items);
             return new SaveSnapshot
             {
-                Manifest = new Manifest { Version = items.Any(i => i.LayerVisibility != null) ? 4 : items.Any(i => i.HasMask) ? 3 : items.Any(i => i.IsText) ? 2 : 1,
+                Manifest = new Manifest { Version = items.Any(i => i.Transparency > 0) ? 5 : items.Any(i => i.LayerVisibility != null) ? 4 : items.Any(i => i.HasMask) ? 3 : items.Any(i => i.IsText) ? 2 : 1,
                     Images = items, Zoom = Zoom, PanX = PanX, PanY = PanY },
                 Assets = items.Where(i => !i.IsText).Select(i => i.Asset).Distinct().ToDictionary(key => key, key => Assets[key].Bytes),
                 Revision = revision
@@ -319,7 +321,7 @@ namespace ArkBoard
                 ZipArchiveEntry me = zip.GetEntry("manifest.json");
                 if (me == null || me.Length > 8 * 1024 * 1024) throw new InvalidDataException("Project manifest is missing or too large.");
                 using (Stream stream = me.Open()) manifest = (Manifest)new DataContractJsonSerializer(typeof(Manifest)).ReadObject(stream);
-                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || manifest.Version < 1 || manifest.Version > 4 || manifest.Images == null)
+                if (manifest == null || (manifest.Format != "ArkBoard" && manifest.Format != "RefCanvas") || manifest.Version < 1 || manifest.Version > 5 || manifest.Images == null)
                     throw new InvalidDataException("Unsupported project format or version.");
                 if (manifest.Images.Count > 10000) throw new InvalidDataException("Project contains too many images.");
                 var ids = new HashSet<string>();
@@ -332,6 +334,9 @@ namespace ArkBoard
                         !Finite(i.Width) || !Finite(i.Height) || !Finite(i.Rotation) || i.Width < 0.01 || i.Height < 0.01 ||
                         i.Width > 1000000 || i.Height > 1000000 || Math.Abs(i.X) > 100000000 || Math.Abs(i.Y) > 100000000)
                         throw new InvalidDataException("Invalid image data.");
+                    if (!Finite(i.Transparency) || i.Transparency < 0 || i.Transparency > 1 ||
+                        (i.Transparency > 0 && (manifest.Version < 5 || i.IsText)))
+                        throw new InvalidDataException("Invalid image transparency.");
                     if (!Finite(i.MaskLeft) || !Finite(i.MaskTop) || !Finite(i.MaskRight) || !Finite(i.MaskBottom))
                         throw new InvalidDataException("Invalid image mask.");
                     if (i.IsText)

@@ -1,10 +1,16 @@
-# ArkBoard 1.19.0
+# ArkBoard 1.20.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Image selection and transparency in 1.20.0
+
+- Clicking through the hidden part of a Shift-cropped image selects the visible image below. Original bounds remain available for selection when no visible object is under the pointer.
+- The selection inspector includes an **Image transparency** slider: 0% is fully transparent on the left and 100% is opaque on the right (the default). It changes all selected images together, leaves selected text unchanged, previews immediately and supports undo/redo as one change per drag. **Mixed** indicates different values in the selection.
+- Transparency is saved with each image, preserved by duplication and ArkBoard copy/paste, and combines with the window opacity. Projects using it require manifest version 5; older projects continue to open at 0% transparency.
 
 ## Color Picker in 1.19.0
 
@@ -235,7 +241,7 @@ The bottom **Opacity** slider changes the entire window, including images and th
 
 ## Project format
 
-**.arkboard is a standard ZIP archive** containing `manifest.json` and `assets/<sha256>.<extension>`. Manifest version 1 records image layout, version 2 adds text, version 3 adds non-destructive image-mask insets, and version 4 adds per-object PSD layer visibility. Transforms apply local flips, clockwise rotation in degrees, then translation. Positions are canvas units.
+**.arkboard is a standard ZIP archive** containing `manifest.json` and `assets/<sha256>.<extension>`. Manifest version 1 records image layout, version 2 adds text, version 3 adds non-destructive image-mask insets, version 4 adds per-object PSD layer visibility, and version 5 adds per-image transparency. Transforms apply local flips, clockwise rotation in degrees, then translation. Positions are canvas units.
 
 BeeRef format versions 1 and 2 can be imported from `.bee` SQLite projects. ArkBoard transfers embedded images, text, stacking order, position, scale, rotation, horizontal flips and crops. Per-image opacity and grayscale effects are reported but ignored. The source `.bee` is opened read-only and is never overwritten; saving the imported board creates an ArkBoard project.
 
@@ -260,13 +266,20 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.19.0
-Start-Process .\dist-arkboard-1.19.0\ArkBoard.exe -ArgumentList '--self-test','test-output-arkboard-1.19.0' -WindowStyle Hidden -Wait
+.\build.ps1 -OutputDirectory dist-arkboard-1.20.0
+$verificationFolder = Join-Path $env:TEMP ('ArkBoard-check-' + [Guid]::NewGuid().ToString('N'))
+try {
+    Start-Process .\dist-arkboard-1.20.0\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
+    Get-Content (Join-Path $verificationFolder 'results.txt')
+    # Inspect the generated screenshots before removing this temporary folder.
+} finally {
+    Remove-Item -LiteralPath $verificationFolder -Recurse -Force -ErrorAction SilentlyContinue
+}
 ```
 
-Tests write `results.txt`, screenshots and synthetic sample projects under `test-output-arkboard-1.19.0`; failures produce `FAILED.txt`. They cover color sampling through image transforms and masks, update preference parsing and trusted GitHub release asset selection, atomic background saving and loading, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, adaptive rotation controls, masked-edge move and scale snapping with shared padding and Ctrl override, free-space packing density, width and height alignment, cursor-position paste, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity and normalization. They do not modify user projects.
+Tests write `results.txt`, screenshots and synthetic sample projects in the temporary verification folder outside the repository; failures produce `FAILED.txt`. They cover color sampling through image transforms and masks, update preference parsing and trusted GitHub release asset selection, atomic background saving and loading, progress reporting, pre-compressed asset storage, persistence, embedded assets, BeeRef v1/v2 and synthetic PureRef legacy read-only migration, multi-image group scaling and rotation, adaptive rotation controls, masked-edge move and scale snapping with shared padding and Ctrl override, free-space packing density, width and height alignment, cursor-position paste, PSD raw/RLE layer decoding and visibility, localized UI, locked-overlay hit regions, drag-zoom direction, empty-canvas double-click fitting, compact sidebar layout, the complete Quick Controls list, masking and mask movement, selection controls, ArkBoard clipboard data, reset commands, auto-sorting, text creation and editing, undo/redo, invalid files, import parsing, viewport math, panel visibility, native opacity and normalization. They do not modify user projects.
 
-Release reminder: check the version shown by **Help → About ArkBoard** in all three languages when preparing each release. Its text is hard-coded in `src/MainWindow.cs` and must be updated alongside `src/AssemblyInfo.cs`, `build.ps1` and this README. The 1.19.0 release still shows 1.18.1 in About; correct it in a future update.
+Release reminder: check the version shown by **Help → About ArkBoard** in all three languages when preparing each release. Its text is hard-coded in `src/MainWindow.cs` and must be updated alongside `src/AssemblyInfo.cs`, `build.ps1` and this README.
 
 
 For a repeatable rendering benchmark, run the executable with `--benchmark benchmark-output`. The report uses 24 synthetic images at 1280, 1920 and 2560 pixel window widths. It measures off-screen software snapshots, **not desktop frame rate**. Actual performance also depends on image content, display resolution, GPU drivers and opacity.

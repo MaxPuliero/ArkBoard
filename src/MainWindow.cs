@@ -26,6 +26,10 @@ namespace ArkBoard
         Border inspector;
         ColumnDefinition inspectorColumn;
         internal Slider opacitySlider;
+        internal Slider imageTransparencySlider;
+        TextBlock imageTransparencyValue;
+        StackPanel imageTransparencySection;
+        bool syncingImageTransparency, imageTransparencyGesture, imageTransparencyCheckpoint;
         internal ProgressBar saveProgress;
         WindowTransparency transparency;
         WindowInputLock inputLock;
@@ -101,7 +105,7 @@ namespace ArkBoard
                 if (e.Key == Key.Space) { Board.SpaceDown = false; Board.Cursor = Cursors.Arrow; }
                 if (e.Key == Key.LeftShift || e.Key == Key.RightShift) Board.SetShiftPreview(false);
             };
-            Deactivated += delegate { Board.SpaceDown = false; Board.SetShiftPreview(false); Board.FinishGesture(); };
+            Deactivated += delegate { EndImageTransparencyGesture(); Board.SpaceDown = false; Board.SetShiftPreview(false); Board.FinishGesture(); };
             LocationChanged += delegate { PositionLockControls(); };
             SizeChanged += delegate { PositionLockControls(); };
             StateChanged += delegate { PositionLockControls(); };
@@ -484,6 +488,36 @@ namespace ArkBoard
             properties = new StackPanel { Margin = new Thickness(0, 26, 0, 0) }; side.Children.Add(properties);
             imageName = Label("", 16, text); imageName.FontWeight = FontWeights.SemiBold; properties.Children.Add(imageName);
             imageInfo = Label("", 12, secondary); imageInfo.Margin = new Thickness(0, 7, 0, 28); properties.Children.Add(imageInfo);
+            imageTransparencySection = new StackPanel { Margin = new Thickness(0, 0, 0, 23) };
+            properties.Children.Add(imageTransparencySection);
+            imageTransparencySection.Children.Add(Label("Image transparency", 12, secondary));
+            Grid transparencyRow = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+            transparencyRow.ColumnDefinitions.Add(new ColumnDefinition());
+            transparencyRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            imageTransparencySlider = new Slider { Minimum = 0, Maximum = 100, Value = 100,
+                SmallChange = 1, LargeChange = 10, TickFrequency = 1, IsSnapToTickEnabled = true,
+                IsMoveToPointEnabled = true, Margin = new Thickness(0, 0, 10, 0),
+                ToolTip = Localization.T("Image transparency · 0% transparent, 100% opaque · Applies to all selected images") };
+            System.Windows.Automation.AutomationProperties.SetName(imageTransparencySlider, Localization.T("Image transparency"));
+            imageTransparencyValue = Label("100%", 12, text); imageTransparencyValue.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetColumn(imageTransparencyValue, 1);
+            transparencyRow.Children.Add(imageTransparencySlider); transparencyRow.Children.Add(imageTransparencyValue);
+            imageTransparencySection.Children.Add(transparencyRow);
+            imageTransparencySlider.PreviewMouseLeftButtonDown += delegate { BeginImageTransparencyGesture(); };
+            imageTransparencySlider.AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler(delegate { EndImageTransparencyGesture(); }), true);
+            imageTransparencySlider.LostMouseCapture += delegate { EndImageTransparencyGesture(); };
+            imageTransparencySlider.PreviewKeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.Key == Key.Left || e.Key == Key.Right || e.Key == Key.Up || e.Key == Key.Down ||
+                    e.Key == Key.Home || e.Key == Key.End || e.Key == Key.PageUp || e.Key == Key.PageDown)
+                    if (!imageTransparencyGesture) BeginImageTransparencyGesture();
+            };
+            imageTransparencySlider.PreviewKeyUp += delegate { EndImageTransparencyGesture(); };
+            imageTransparencySlider.LostKeyboardFocus += delegate { EndImageTransparencyGesture(); };
+            imageTransparencySlider.ValueChanged += delegate
+            {
+                if (!syncingImageTransparency) SetImageTransparency(imageTransparencySlider.Value);
+            };
             rotationSection = new StackPanel(); properties.Children.Add(rotationSection);
             rotationSection.Children.Add(Label("Rotation · degrees", 12, secondary));
             Grid rotationRow = new Grid { Margin = new Thickness(0, 8, 0, 23) };
@@ -705,6 +739,7 @@ namespace ArkBoard
             var items = Document.Selection.ToList(); bool any = items.Count > 0;
             bool anyImages = items.Any(x => !x.IsText);
             bool anyMasks = items.Any(x => x.HasMask);
+            RefreshImageTransparency(items);
             rotationSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             flipSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
             removeMaskButton.Visibility = anyMasks ? Visibility.Visible : Visibility.Collapsed;
@@ -828,6 +863,39 @@ namespace ArkBoard
         }
         void EditSelection(Action<ImageItem> action)
         { if (!Document.Selection.Any()) return; Board.FinishGesture(); Document.Change(() => { foreach (ImageItem i in Document.Selection) action(i); }); }
+        void RefreshImageTransparency(List<ImageItem> items)
+        {
+            ImageItem[] images = items.Where(i => !i.IsText).ToArray();
+            imageTransparencySection.Visibility = images.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            imageTransparencySlider.ToolTip = Localization.T("Image transparency · 0% transparent, 100% opaque · Applies to all selected images");
+            System.Windows.Automation.AutomationProperties.SetName(imageTransparencySlider, Localization.T("Image transparency"));
+            if (images.Length == 0) return;
+            double value = images[0].Transparency;
+            bool mixed = images.Any(i => Math.Abs(i.Transparency - value) > .000001);
+            syncingImageTransparency = true;
+            try { imageTransparencySlider.Value = (1 - value) * 100; }
+            finally { syncingImageTransparency = false; }
+            imageTransparencyValue.Text = mixed ? Localization.T("Mixed") : ((1 - value) * 100).ToString("0.#") + "%";
+        }
+        internal void BeginImageTransparencyGesture()
+        {
+            Board.FinishGesture(); imageTransparencyGesture = true; imageTransparencyCheckpoint = false;
+        }
+        internal void EndImageTransparencyGesture()
+        { imageTransparencyGesture = false; imageTransparencyCheckpoint = false; }
+        internal void SetImageTransparency(double percent)
+        {
+            if (!BoardDocument.Finite(percent)) return;
+            double value = 1 - Math.Max(0, Math.Min(100, percent)) / 100;
+            ImageItem[] images = Document.Selection.Where(i => !i.IsText).ToArray();
+            if (images.Length == 0 || images.All(i => i.Transparency == value)) return;
+            Board.FinishGesture();
+            if (!imageTransparencyGesture || !imageTransparencyCheckpoint)
+            { Document.Checkpoint(); imageTransparencyCheckpoint = imageTransparencyGesture; }
+            else Document.MarkChanged();
+            foreach (ImageItem image in images) image.Transparency = value;
+            Document.Notify();
+        }
         void EditImageSelection(Action<ImageItem> action)
         {
             ImageItem[] images = Document.Selection.Where(i => !i.IsText).ToArray();
@@ -1432,11 +1500,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.18.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.20.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.18.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.20.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.18.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.20.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

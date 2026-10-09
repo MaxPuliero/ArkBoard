@@ -46,6 +46,7 @@ namespace ArkBoard
                 if (payload == null || payload.Item == null || payload.Item.IsText || payload.Bytes == null ||
                     payload.Item.Width < .01 || payload.Item.Height < .01 || payload.Item.Width > 1000000 || payload.Item.Height > 1000000 ||
                     !BoardDocument.Finite(payload.Item.Width) || !BoardDocument.Finite(payload.Item.Height) ||
+                    !BoardDocument.Finite(payload.Item.Transparency) || payload.Item.Transparency < 0 || payload.Item.Transparency > 1 ||
                     !BoardDocument.ValidMask(payload.Item)) return false;
                 asset = AssetData.Create(payload.Bytes); item = payload.Item; item.Asset = asset.Key;
                 if (item.LayerVisibility != null && (asset.Psd == null || item.LayerVisibility.Count != asset.Psd.Layers.Count)) return false;

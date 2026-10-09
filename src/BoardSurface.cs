@@ -153,7 +153,16 @@ namespace ArkBoard
         public ImageItem Hit(Point screen)
         {
             Point world = ToWorld(screen);
-            return Document.Items.LastOrDefault(i => i.Id != EditingTextId && i.Contains(world));
+            // Visible content wins over the hidden area of a higher cropped image.
+            // Keep a fallback so hidden images remain recoverable on otherwise empty canvas.
+            return Document.Items.LastOrDefault(i => i.Id != EditingTextId &&
+                (i.IsText || i.Transparency < 1) && i.ContainsVisible(world)) ??
+                Document.Items.LastOrDefault(i => i.Id != EditingTextId && i.Contains(world));
+        }
+        internal ImageItem HitForMask(Point screen)
+        {
+            // A selected crop handle must remain usable just outside the clipped pixels.
+            return Document.Selection.LastOrDefault(i => !i.IsText && i.HasMask && MaskEdgeAt(i, screen) >= 0) ?? Hit(screen);
         }
         internal bool TrySampleImageColor(ImageItem item, Point world, out Color color)
         {
@@ -329,7 +338,7 @@ namespace ArkBoard
         internal void SetShiftPreview(bool active)
         {
             ShiftPreview = active;
-            ImageItem hovered = active && IsMouseOver ? Hit(Mouse.GetPosition(this)) : null;
+            ImageItem hovered = active && IsMouseOver ? HitForMask(Mouse.GetPosition(this)) : null;
             HoveredImageId = hovered != null && !hovered.IsText ? hovered.Id : null;
             InvalidateVisual();
         }
@@ -339,7 +348,7 @@ namespace ArkBoard
             Matrix inverse = item.Matrix; if (!inverse.HasInverse) return -1; inverse.Invert();
             Point local = inverse.Transform(ToWorld(screen));
             double threshold = 11 / Math.Max(.01, Document.Zoom);
-            bool useVisibleBounds = item.HasMask && (MaskEditingId == item.Id || (ShiftPreview && HoveredImageId == item.Id));
+            bool useVisibleBounds = item.HasMask && (MaskEditingId == item.Id || (ShiftPreview && (HoveredImageId == item.Id || Document.Selected.Contains(item.Id))));
             Rect bounds = useVisibleBounds ? item.VisibleRect :
                 new Rect(-item.Width / 2, -item.Height / 2, item.Width, item.Height);
             double marginX = Math.Min(bounds.Width * .2, 14 / Math.Max(.01, Document.Zoom));
@@ -531,8 +540,10 @@ namespace ArkBoard
                 if (item.IsText) TextLayout.Draw(dc, item);
                 else
                 {
+                    dc.PushOpacity(1 - item.Transparency);
                     dc.PushClip(new RectangleGeometry(item.VisibleRect));
                     dc.DrawRectangle(imageBackground, null, rect); dc.DrawImage(asset.BitmapFor(item), rect); dc.Pop();
+                    dc.Pop();
                 }
                 dc.Pop();
             }
@@ -708,7 +719,7 @@ namespace ArkBoard
             }
             if (gesture == null && shiftDown)
             {
-                ImageItem maskedHit = Hit(startScreen);
+                ImageItem maskedHit = HitForMask(startScreen);
                 if (maskedHit != null && !maskedHit.IsText)
                 {
                     maskEdge = MaskEdgeAt(maskedHit, startScreen);
@@ -753,7 +764,7 @@ namespace ArkBoard
             if (gesture == null)
             {
                 bool shiftDown = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
-                ImageItem hovered = Hit(screen);
+                ImageItem hovered = shiftDown ? HitForMask(screen) : Hit(screen);
                 string hoveredId = hovered != null && !hovered.IsText ? hovered.Id : null;
                 bool previewChanged = ShiftPreview != shiftDown || HoveredImageId != hoveredId;
                 ShiftPreview = shiftDown; HoveredImageId = hoveredId;
