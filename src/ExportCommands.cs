@@ -10,12 +10,6 @@ namespace ArkBoard
 {
     public sealed partial class MainWindow
     {
-        sealed class ExportDialogOwner : System.Windows.Forms.IWin32Window
-        {
-            readonly IntPtr handle;
-            internal ExportDialogOwner(System.Windows.Window window) { handle = new System.Windows.Interop.WindowInteropHelper(window).Handle; }
-            public IntPtr Handle { get { return handle; } }
-        }
         readonly List<MenuItem> selectionFileCommands = new List<MenuItem>();
         void AddSelectionFileCommands(MenuItem file)
         {
@@ -73,27 +67,24 @@ namespace ArkBoard
         async void ExportImages()
         {
             if (!PrepareSelectionExport(true)) return;
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog { Description = Localization.T("Choose a folder for the exported PNG images."), ShowNewFolderButton = true })
+            try
             {
-                if (dialog.ShowDialog(new ExportDialogOwner(this)) != System.Windows.Forms.DialogResult.OK) return;
-                try
+                string folder = FolderPicker.Show(this);
+                if (folder == null) return;
+                List<ExportDrawing> snapshots = Document.Selection.Where(i => !i.IsText)
+                    .Select(i => SelectionExport.Capture(Document, new[] { i })).ToList();
+                var progress = new Progress<double>(value => saveProgress.Value = value * 100);
+                await RunExport(() =>
                 {
-                    List<ExportDrawing> snapshots = Document.Selection.Where(i => !i.IsText)
-                        .Select(i => SelectionExport.Capture(Document, new[] { i })).ToList();
-                    string folder = dialog.SelectedPath;
-                    var progress = new Progress<double>(value => saveProgress.Value = value * 100);
-                    await RunExport(() =>
+                    int done = 0;
+                    foreach (ExportDrawing snapshot in snapshots)
                     {
-                        int done = 0;
-                        foreach (ExportDrawing snapshot in snapshots)
-                        {
-                            SizeToPng(snapshot, folder);
-                            ((IProgress<double>)progress).Report((double)++done / snapshots.Count);
-                        }
-                    }, "Images exported");
-                }
-                catch (Exception ex) { Error("Unable to export images", ex); }
+                        SizeToPng(snapshot, folder);
+                        ((IProgress<double>)progress).Report((double)++done / snapshots.Count);
+                    }
+                }, "Images exported");
             }
+            catch (Exception ex) { Error("Unable to export images", ex); }
         }
         static void SizeToPng(ExportDrawing snapshot, string folder)
         {

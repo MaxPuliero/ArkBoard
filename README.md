@@ -1,10 +1,16 @@
-# ArkBoard 1.21.2
+# ArkBoard 1.21.3
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Consistent export folder dialog in 1.21.3
+
+- **File → Export Images** now uses the modern Windows Explorer folder picker, with the same navigation style as **Save As**: address bar, search, sidebar and **New folder**.
+- Browse to a destination or paste its path, then click **Export** to write the selected images there as separate PNG files. The dialog selects a folder; no output filename is required.
+- **Cancel** closes the picker without exporting or changing the board. Dialog titles and the Export button follow ArkBoard's selected language. The native picker needs no additional libraries.
 
 ## Image export threading fix in 1.21.2
 
@@ -287,10 +293,10 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.21.2
+.\build.ps1 -OutputDirectory dist-arkboard-1.21.3
 $verificationFolder = Join-Path $env:TEMP ('ArkBoard-check-' + [Guid]::NewGuid().ToString('N'))
 try {
-    Start-Process .\dist-arkboard-1.21.2\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
+    Start-Process .\dist-arkboard-1.21.3\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
     Get-Content (Join-Path $verificationFolder 'results.txt')
     # Inspect the generated screenshots before removing this temporary folder.
 } finally {

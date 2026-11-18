@@ -10,6 +10,7 @@ ArkBoard is a portable x64 WPF application for Windows 10/11, built with the .NE
 - `src/BoardSurface.cs`: canvas rendering, hit testing and pointer gestures.
 - `src/BoardCore.cs`: document model, undo/redo, embedded ZIP project format and layout helpers.
 - `src/WebpSupport.cs`: Windows WebP decoding and missing-codec error classification with the official Microsoft Store extension URL.
+- `src/FolderPicker.cs`: native Windows Explorer Common Item Dialog for Export Images folder selection, matching Save As navigation.
 - `src/SelectionExport.cs`, `src/ExportCommands.cs`: selected-project saves, frozen drawing snapshots and PNG canvas/individual-image exports on an STA worker.
 - `src/BeeImporter.cs`: read-only BeeRef `.bee` v1/v2 SQLite migration importer using the Windows `winsqlite3.dll` system library.
 - `src/PureRefImporter.cs`: experimental read-only PureRef `.pur` legacy 1.10/1.11 migration importer for embedded PNG assets and basic item transforms.
