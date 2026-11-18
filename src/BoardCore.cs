@@ -117,6 +117,7 @@ namespace ArkBoard
             {
                 psd = PsdDocument.Read(bytes); frame = psd.Compose(null);
             }
+            else if (WebpSupport.IsWebp(bytes)) frame = WebpSupport.Decode(bytes);
             else using (MemoryStream stream = new MemoryStream(bytes, false))
             {
                 BitmapDecoder decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
@@ -245,16 +246,19 @@ namespace ArkBoard
         {
             internal Manifest Manifest;
             internal Dictionary<string, byte[]> Assets;
+            internal Dictionary<string, BitmapSource> WebpBitmaps;
             internal long Revision;
         }
-        SaveSnapshot SnapshotForSave()
+        SaveSnapshot SnapshotForSave(IEnumerable<ImageItem> source)
         {
-            List<ImageItem> items = Clone(Items);
+            List<ImageItem> items = source.Select(i => i.Copy()).ToList();
             return new SaveSnapshot
             {
                 Manifest = new Manifest { Version = items.Any(i => i.Transparency > 0) ? 5 : items.Any(i => i.LayerVisibility != null) ? 4 : items.Any(i => i.HasMask) ? 3 : items.Any(i => i.IsText) ? 2 : 1,
                     Images = items, Zoom = Zoom, PanX = PanX, PanY = PanY },
                 Assets = items.Where(i => !i.IsText).Select(i => i.Asset).Distinct().ToDictionary(key => key, key => Assets[key].Bytes),
+                WebpBitmaps = items.Where(i => !i.IsText).Select(i => i.Asset).Distinct().Where(key => WebpSupport.IsWebp(Assets[key].Bytes))
+                    .ToDictionary(key => key, key => Assets[key].Bitmap),
                 Revision = revision
             };
         }
@@ -269,7 +273,20 @@ namespace ArkBoard
             string temp = full + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
+                // Snapshot owns the manifest and dictionaries; normalization never changes the live board.
+                foreach (var pair in snapshot.WebpBitmaps)
+                {
+                    var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(pair.Value));
+                    byte[] png;
+                    using (var stream = new MemoryStream()) { encoder.Save(stream); png = stream.ToArray(); }
+                    if (png.LongLength > AssetData.MaxBytes) throw new InvalidDataException("Converted WebP exceeds the 100 MB image limit.");
+                    string key;
+                    using (SHA256 sha = SHA256.Create()) key = BitConverter.ToString(sha.ComputeHash(png)).Replace("-", "").ToLowerInvariant() + ".png";
+                    snapshot.Assets.Remove(pair.Key); snapshot.Assets[key] = png;
+                    foreach (ImageItem item in snapshot.Manifest.Images) if (item.Asset == pair.Key) item.Asset = key;
+                }
                 long total = Math.Max(1, snapshot.Assets.Values.Sum(bytes => bytes.LongLength));
+                if (total > 1024L * 1024 * 1024) throw new InvalidDataException("Project exceeds the 1 GB asset limit after PNG conversion.");
                 long written = 0; if (progress != null) progress.Report(0);
                 using (FileStream file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Create))
@@ -298,17 +315,31 @@ namespace ArkBoard
         }
         public void Save(string path)
         {
-            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave();
+            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave(Items);
             WriteSnapshot(full, snapshot, null);
             Path = full; if (revision == snapshot.Revision) Dirty = false; Notify();
         }
         public async Task SaveAsync(string path, IProgress<double> progress)
         {
-            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave();
+            string full = System.IO.Path.GetFullPath(path); SaveSnapshot snapshot = SnapshotForSave(Items);
             await Task.Run(() => WriteSnapshot(full, snapshot, progress));
             Path = full; if (revision == snapshot.Revision) Dirty = false; Notify();
         }
         public void Load(string path) { Load(path, null); }
+        public async Task SaveSelectedAsync(string path, IProgress<double> progress)
+        {
+            string full = System.IO.Path.GetFullPath(path);
+            if (Path != null && string.Equals(full, System.IO.Path.GetFullPath(Path), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(Localization.T("Choose a different file for the selection."));
+            SaveSnapshot snapshot = SnapshotForSave(Selection);
+            if (snapshot.Manifest.Images.Count == 0) throw new InvalidOperationException(Localization.T("Select objects first."));
+            Rect bounds = SelectionExport.Bounds(snapshot.Manifest.Images);
+            double scale = Math.Min(1000 / Math.Max(1, bounds.Width), 700 / Math.Max(1, bounds.Height));
+            snapshot.Manifest.Zoom = Math.Max(.01, Math.Min(16, scale));
+            snapshot.Manifest.PanX = 500 - (bounds.Left + bounds.Width / 2) * snapshot.Manifest.Zoom;
+            snapshot.Manifest.PanY = 350 - (bounds.Top + bounds.Height / 2) * snapshot.Manifest.Zoom;
+            await Task.Run(() => WriteSnapshot(full, snapshot, progress));
+        }
         public void Load(string path, IProgress<double> progress)
         {
             // Parse and validate separately: a damaged file must never replace the open board.

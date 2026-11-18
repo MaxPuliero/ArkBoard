@@ -678,7 +678,7 @@ namespace ArkBoard
             Capture(window, Path.Combine(folder, "ui-board.png"));
             MenuItem[] contextSections = window.Board.ContextMenu.Items.OfType<MenuItem>().ToArray();
             Check(contextSections.Length == 5 && contextSections.Select(item => (string)item.Tag).SequenceEqual(new[] { "_File", "_Edit", "_View", "_Settings", "_Help" }) &&
-                contextSections[0].Items.Count == 9 && contextSections[1].Items.Count == 16 && contextSections[2].Items.Count == 7 &&
+                contextSections[0].Items.Count == 12 && contextSections[1].Items.Count == 16 && contextSections[2].Items.Count == 7 &&
                 contextSections[3].Items.Count == 6 && contextSections[4].Items.Count == 1,
                 "The canvas context menu mirrors every top-level menu-bar section and command group");
             CaptureContextMenu(window, Path.Combine(folder, "ui-context-menu.png"));

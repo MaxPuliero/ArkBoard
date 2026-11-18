@@ -1,10 +1,19 @@
-# ArkBoard 1.20.0
+# ArkBoard 1.21.0
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Selection export and portable WebP in 1.21.0
+
+- WebP uses the bundled x64 libwebp decoder, including the first frame of animated files. No Windows Store codec is required. Opening existing projects preserves asset integrity checks; saving converts embedded WebP assets to lossless PNG for portability, without changing the project schema. Conversion can increase project size.
+- **File → Save Selected** writes selected images and text to a separate `.arkboard`, preserving layout, masks, transforms, transparency and PSD layer visibility. It includes only referenced assets and leaves the current project's path and unsaved state unchanged.
+- **File → Export Canvas** writes the selected objects as one PNG. Enter either pixel width or height; the other follows the selection's aspect ratio. Choose a transparent background or a white background. Exports omit grid, controls and unselected objects. Limits: 16,384 pixels per side and 80 megapixels.
+- **File → Export Images** writes a transparent PNG per selected image to a chosen folder, applying rotation, flips, masks, image opacity and visible PSD layers. Each image uses its source pixel density (reduced when needed to stay within export limits). Text is included in canvas export and selected-project saves, but omitted from individual-image export. Existing filenames receive numbered suffixes and are never overwritten.
+- All three commands also appear in the canvas context menu and are translated into English, Italian and Japanese.
+- Keep `libwebp.dll`, `libwebpdemux.dll` and `libsharpyuv.dll` beside `ArkBoard.exe`. Redistribution notices and dependency provenance are in `third-party/libwebp`.
 
 ## Image selection and transparency in 1.20.0
 
@@ -253,7 +262,7 @@ Saving writes a temporary file beside the destination and replaces the project a
 
 ## Limits
 
-- Supports PNG, JPEG, BMP, TIFF, ICO, basic 8-bit RGB PSD layers and the first GIF frame. WebP depends on installed Windows WIC codecs. SVG, PSB, video and animation are not supported.
+- Supports PNG, JPEG, BMP, TIFF, ICO, basic 8-bit RGB PSD layers and the first GIF/WebP frame. WebP decoding is bundled with the portable app. SVG, PSB, video and animation playback are not supported.
 - Ctrl+C copies one original image. Use Ctrl+D to duplicate multiple selected images with their transforms.
 - Multiple-image transforms operate around each image's own center; there is no group transform handle.
 - Up to 100 images per import, 100 MB and 80 megapixels per image. Web downloads are limited to 50 MB with a timeout.
@@ -266,10 +275,10 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.20.0
+.\build.ps1 -OutputDirectory dist-arkboard-1.21.0
 $verificationFolder = Join-Path $env:TEMP ('ArkBoard-check-' + [Guid]::NewGuid().ToString('N'))
 try {
-    Start-Process .\dist-arkboard-1.20.0\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
+    Start-Process .\dist-arkboard-1.21.0\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
     Get-Content (Join-Path $verificationFolder 'results.txt')
     # Inspect the generated screenshots before removing this temporary folder.
 } finally {

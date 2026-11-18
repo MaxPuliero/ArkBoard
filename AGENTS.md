@@ -9,6 +9,8 @@ ArkBoard is a portable x64 WPF application for Windows 10/11, built with the .NE
 - `src/MainWindow.cs`: programmatic WPF shell, menus, inspector, commands, import and persistence UI.
 - `src/BoardSurface.cs`: canvas rendering, hit testing and pointer gestures.
 - `src/BoardCore.cs`: document model, undo/redo, embedded ZIP project format and layout helpers.
+- `src/WebpSupport.cs`: bundled native libwebp decoding, independent of installed Windows codecs; static-CRT x64 binaries and notices live in `third-party/libwebp`.
+- `src/SelectionExport.cs`, `src/ExportCommands.cs`: selected-project saves, frozen drawing snapshots and PNG canvas/individual-image exports on an STA worker.
 - `src/BeeImporter.cs`: read-only BeeRef `.bee` v1/v2 SQLite migration importer using the Windows `winsqlite3.dll` system library.
 - `src/PureRefImporter.cs`: experimental read-only PureRef `.pur` legacy 1.10/1.11 migration importer for embedded PNG assets and basic item transforms.
 - `src/PsdSupport.cs`: intentionally basic 8-bit RGB PSD raster-layer decoder/compositor.
@@ -34,6 +36,8 @@ View controls: double-clicking an image selects and fits that image; double-clic
 The startup update check queries GitHub's latest-release API asynchronously with a short timeout and fails silently when offline. It must never delay the main window. The synchronized **Auto-Check for Updates** setting defaults on and persists as `checkForUpdates` in `%APPDATA%\ArkBoard\settings.ini`; its adjacent **Check** button performs a manual check, reports when the app is current, and downloads the trusted release asset through a Windows Save dialog. Self-tests must not access the real preference file.
 
 Keep the assembly version, build default directory, README version and release filename aligned. Preserve existing `.arkboard` manifests unless a feature requires a new schema version. Projects are ZIP archives with embedded source assets; PSD visibility is stored per canvas item.
+
+WebP loading must use the bundled decoder, including the first frame of animated images. Verify asset integrity against the original bytes when loading existing projects; normal and selected-project saves normalize WebP assets to PNG on the snapshot worker without changing the live board. Save Selected must preserve the active project's path, dirty state and selection, include only referenced assets, and reject overwriting the active project. PNG exports use selected objects' transformed visible bounds, masks, flips, opacity and visible PSD layers. Export Canvas includes selected text, keeps the pixel aspect ratio locked and offers transparent or white backgrounds; Export Images skips text, uses source pixel density within export limits and never overwrites existing files. Keep all three commands in both File menus. Export limits are 16,384 pixels per side and 80 megapixels.
 
 GitHub releases are separate from pushing `main` and tags: create the annotated `vX.Y.Z` tag, then create the GitHub release and upload the matching `ArkBoard-X.Y.Z-portable.zip`. The portable ZIP and `dist-*` folders are intentionally ignored by Git.
 

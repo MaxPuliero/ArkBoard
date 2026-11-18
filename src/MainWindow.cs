@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -340,6 +340,7 @@ namespace ArkBoard
             file.Items.Add(openRecentItem); RefreshRecentMenu();
             file.Items.Add(MenuAction("Save", "Ctrl+S", () => BeginSave(false)));
             file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => BeginSave(true)));
+            AddSelectionFileCommands(file);
             file.Items.Add(MenuSeparator());
             file.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
             file.Items.Add(MenuSeparator()); file.Items.Add(MenuAction("Exit", "Alt+F4", Close));
@@ -630,6 +631,7 @@ namespace ArkBoard
             file.Items.Add(openRecentContextItem); RefreshRecentMenu();
             file.Items.Add(MenuAction("Save", "Ctrl+S", () => BeginSave(false)));
             file.Items.Add(MenuAction("Save As...", "Ctrl+Shift+S", () => BeginSave(true)));
+            AddSelectionFileCommands(file);
             file.Items.Add(MenuSeparator());
             file.Items.Add(MenuAction("Import Images...", "Ctrl+I", ImportDialog));
             file.Items.Add(MenuSeparator()); file.Items.Add(MenuAction("Exit", "Alt+F4", Close));
@@ -738,6 +740,7 @@ namespace ArkBoard
             undoMenuItem.IsEnabled = Document.CanUndo; redoMenuItem.IsEnabled = Document.CanRedo;
             var items = Document.Selection.ToList(); bool any = items.Count > 0;
             bool anyImages = items.Any(x => !x.IsText);
+            RefreshSelectionFileCommands(any, anyImages);
             bool anyMasks = items.Any(x => x.HasMask);
             RefreshImageTransparency(items);
             rotationSection.Visibility = anyImages ? Visibility.Visible : Visibility.Collapsed;
@@ -1500,11 +1503,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.20.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con codec Windows installato.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con decoder incluso.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.20.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFの先頭フレーム、Windowsコーデック利用時のWebP。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFとWebPの先頭フレーム（WebPデコーダー内蔵）。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.20.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF frame, and WebP when a Windows codec is installed.\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF and WebP frame (bundled WebP decoder).\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }
