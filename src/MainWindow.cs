@@ -1404,14 +1404,18 @@ namespace ArkBoard
             if (sources.Count == 0) { SetStatus("No image found · Drop an image or use Copy Image in your browser"); return; }
             if (sources.Count > 100) { SetStatus("Import up to 100 images at a time."); return; }
             busy = true; Board.IsEnabled = false;
-            var loaded = new List<Tuple<AssetData, string>>(); var errors = new List<string>();
+            var loaded = new List<Tuple<AssetData, string>>(); var errors = new List<string>(); bool missingWebp = false;
             try
             {
                 foreach (ImportSource source in sources)
                 {
                     SetStatus("Importing " + (loaded.Count + errors.Count + 1) + "/" + sources.Count + " · " + source.Name);
                     try { loaded.Add(Tuple.Create(await Importer.LoadAsync(source), source.Name)); }
-                    catch (Exception ex) { errors.Add(source.Name + ": " + ex.Message); }
+                    catch (Exception ex)
+                    {
+                        bool webp = WebpSupport.NeedsExtensionHelp(ex); missingWebp |= webp;
+                        errors.Add(source.Name + (webp ? "" : ": " + ex.Message));
+                    }
                 }
                 if (loaded.Count > 0)
                 {
@@ -1428,12 +1432,21 @@ namespace ArkBoard
                     Document.CollectAssets(); Document.Notify(); if (loaded.Count > 1) Board.Fit(true);
                 }
                 SetStatus(loaded.Count + " images imported" + (errors.Count > 0 ? " · " + errors.Count + " failed" : " · Images embedded"));
-                if (errors.Count > 0 && !testMode) MessageBox.Show(this, string.Join("\n\n", errors.Take(5)) + (errors.Count > 5 ? "\n\nAdditional errors: " + (errors.Count - 5) : ""), "Some images could not be imported", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (errors.Count > 0 && !testMode)
+                {
+                    string details = string.Join("\n\n", errors.Take(5)) + (errors.Count > 5 ? "\n\nAdditional errors: " + (errors.Count - 5) : "");
+                    if (missingWebp) DarkDialog.ShowWebpHelp(this, details);
+                    else MessageBox.Show(this, details, "Some images could not be imported", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
             finally { busy = false; Board.IsEnabled = true; Board.Focus(); }
         }
         void Error(string title, Exception ex)
-        { SetStatus(title); if (!testMode) MessageBox.Show(this, ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning); }
+        {
+            SetStatus(title); if (testMode) return;
+            if (WebpSupport.NeedsExtensionHelp(ex)) DarkDialog.ShowWebpHelp(this);
+            else MessageBox.Show(this, ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         void OnKey(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape && pendingScreenGrab != null)
@@ -1503,11 +1516,11 @@ namespace ArkBoard
         {
             string message;
             if (Localization.Current == UiLanguage.Italian)
-                message = "ArkBoard 1.21.0\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con decoder incluso.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.1\nCanvas portatile per immagini di riferimento.\n\nFILE COMPATIBILI\nProgetti: .arkboard, .refcanvas, .zip; importazione BeeRef .bee e PureRef legacy .pur sperimentale in sola lettura\nImmagini: PNG, JPEG, BMP, TIFF, ICO, primo fotogramma GIF e WebP con estensione Windows installata.\nPSD: livelli raster RGB a 8 bit con dati raw o RLE.\n\nPIATTAFORME\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENZA\nMIT Open Source\n\nCODICE SORGENTE E VERSIONI\nhttps://github.com/MaxPuliero/ArkBoard";
             else if (Localization.Current == UiLanguage.Japanese)
-                message = "ArkBoard 1.21.0\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFとWebPの先頭フレーム（WebPデコーダー内蔵）。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.1\nポータブルなリファレンス画像キャンバス。\n\n対応ファイル\nプロジェクト: .arkboard, .refcanvas, .zip; BeeRef .beeとPureRef legacy .purは試験的な読み取り専用インポート\n画像: PNG, JPEG, BMP, TIFF, ICO, GIFとWebPの先頭フレーム（WebPにはWindows拡張機能が必要）。\nPSD: 8ビットRGBのraw/RLEラスターレイヤー。\n\n対応OS\nWindows 10/11 x64 · .NET Framework 4.8\n\nライセンス\nMITオープンソース\n\nソースとリリース\nhttps://github.com/MaxPuliero/ArkBoard";
             else
-                message = "ArkBoard 1.21.0\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF and WebP frame (bundled WebP decoder).\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
+                message = "ArkBoard 1.21.1\nPortable reference-image canvas.\n\nCOMPATIBLE FILES\nProjects: .arkboard, .refcanvas, .zip; read-only BeeRef .bee and experimental PureRef legacy .pur import\nImages: PNG, JPEG, BMP, TIFF, ICO, first GIF and WebP frame (WebP requires the Windows extension).\nPSD: 8-bit RGB raw/RLE raster layers.\n\nPLATFORMS\nWindows 10/11 x64 · .NET Framework 4.8\n\nLICENSE\nMIT Open Source\n\nSOURCE AND RELEASES\nhttps://github.com/MaxPuliero/ArkBoard";
             DarkDialog.ShowAbout(this, message);
         }
     }

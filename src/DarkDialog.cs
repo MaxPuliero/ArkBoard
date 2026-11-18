@@ -137,6 +137,22 @@ namespace ArkBoard
             window.ShowDialog();
         }
 
+        internal static void ShowWebpHelp(Window owner, string details = null)
+        {
+            StackPanel buttons;
+            string message = WebpSupport.HelpMessage + (string.IsNullOrWhiteSpace(details) ? "" : "\n\n" + details);
+            Window window = Create(owner, Localization.T("WebP support required"), message, out buttons);
+            Button download = FlatButton(Localization.T("Download WebP extension"));
+            download.Click += delegate
+            {
+                try { Process.Start(new ProcessStartInfo(WebpSupport.ExtensionUrl) { UseShellExecute = true }); }
+                catch { ShowNotice(window, "ArkBoard", Localization.T("Open this link in your browser:") + "\n\n" + WebpSupport.ExtensionUrl); }
+            };
+            buttons.Children.Add(download);
+            Button close = FlatButton(Localization.T("Close")); close.Click += delegate { window.Close(); }; buttons.Children.Add(close);
+            window.ShowDialog();
+        }
+
         internal static void ShowUpdate(Window owner, Version current, UpdateInfo update, Action downloadAction)
         {
             string message = string.Format(Localization.T("ArkBoard {0} is available. You are using {1}."), update.Version, current);

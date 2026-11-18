@@ -145,6 +145,7 @@ namespace ArkBoard
                 }
             }
             try { return await Task.Run(() => AssetData.Create(bytes)); }
+            catch (WebpCodecUnavailableException) { throw; }
             catch (NotSupportedException) { throw new InvalidDataException("Image format is not supported by the installed Windows codecs. Try PNG/JPEG or Copy Image in your browser."); }
         }
     }

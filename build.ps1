@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = 'dist-arkboard-1.21.0')
+param([string]$OutputDirectory = 'dist-arkboard-1.21.1')
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $frameworkRoot = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319'
@@ -26,10 +26,6 @@ if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'ArkBoard.exe.config') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $output
-Get-ChildItem -LiteralPath (Join-Path $projectRoot 'third-party\libwebp') -Filter '*.dll' | Copy-Item -Destination $output
-$licenseOutput = Join-Path $output 'third-party\libwebp'
-New-Item -ItemType Directory -Force -Path $licenseOutput | Out-Null
-Get-ChildItem -LiteralPath (Join-Path $projectRoot 'third-party\libwebp') -File | Where-Object { $_.Extension -ne '.dll' } | Copy-Item -Destination $licenseOutput
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Register-ArkBoard.ps1') -Destination $output
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs') -Destination $output -Recurse -Force
 Write-Output "Built: $output\ArkBoard.exe"
