@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ArkBoard
@@ -43,13 +42,7 @@ namespace ArkBoard
                     BitmapSource decoded = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
                     if ((long)decoded.PixelWidth * decoded.PixelHeight > 80000000)
                         throw new InvalidDataException("Image exceeds the 80 megapixel limit.");
-                    // Detach WIC frame metadata from its decoder/dispatcher before background PNG saves.
-                    var converted = new FormatConvertedBitmap(decoded, PixelFormats.Bgra32, null, 0);
-                    int stride = checked(decoded.PixelWidth * 4);
-                    byte[] pixels = new byte[checked(stride * decoded.PixelHeight)];
-                    converted.CopyPixels(pixels, stride, 0);
-                    BitmapSource frame = BitmapSource.Create(decoded.PixelWidth, decoded.PixelHeight, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
-                    frame.Freeze(); return frame;
+                    return AssetData.DetachBitmap(decoded);
                 }
             }
             catch (Exception ex)

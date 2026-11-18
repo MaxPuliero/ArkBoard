@@ -124,12 +124,23 @@ namespace ArkBoard
                 frame = decoder.Frames[0];
                 if ((long)frame.PixelWidth * frame.PixelHeight > 80000000)
                     throw new InvalidDataException("Image exceeds the 80 megapixel limit.");
-                frame.Freeze();
+                frame = DetachBitmap(frame);
             }
             string hash;
             using (SHA256 sha = SHA256.Create())
                 hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
             return new AssetData { Key = hash + Extension(bytes), Bytes = bytes, Bitmap = frame, Psd = psd };
+        }
+        internal static BitmapSource DetachBitmap(BitmapSource source)
+        {
+            // Freezing a WIC BitmapFrame does not detach its decoder/dispatcher. Drawing
+            // snapshots can freeze it again on another thread, so retain only pixel data.
+            var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            int stride = checked(source.PixelWidth * 4);
+            byte[] pixels = new byte[checked(stride * source.PixelHeight)];
+            converted.CopyPixels(pixels, stride, 0);
+            BitmapSource bitmap = BitmapSource.Create(source.PixelWidth, source.PixelHeight, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+            bitmap.Freeze(); return bitmap;
         }
         public BitmapSource BitmapFor(ImageItem item)
         {

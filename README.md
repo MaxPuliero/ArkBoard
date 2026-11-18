@@ -1,10 +1,15 @@
-# ArkBoard 1.21.1
+# ArkBoard 1.21.2
 
 A portable reference-image canvas for Windows. Projects contain all their image assets.
 
 ![ArkBoard canvas](docs/arkboard-canvas.png)
 
 ArkBoard is open-source software released under the [MIT License](LICENSE). Prebuilt portable versions are available from the repository's Releases page.
+
+## Image export threading fix in 1.21.2
+
+- Fixed Export Canvas and Export Images failing with “The calling thread cannot access this object because a different thread owns it.” for images decoded on a background thread, including images from opened projects.
+- Loaded JPEG/PNG and other Windows-decoded images now retain a frozen pixel snapshot detached from the decoder. Export snapshots and the STA rendering worker can share those pixels safely. Original embedded asset bytes and project integrity hashes remain unchanged.
 
 ## Windows WebP extension guidance in 1.21.1
 
@@ -282,10 +287,10 @@ Saving writes a temporary file beside the destination and replaces the project a
 Source is in `src`. `build.ps1` uses the installed .NET Framework compiler without downloading packages:
 
 ```powershell
-.\build.ps1 -OutputDirectory dist-arkboard-1.21.1
+.\build.ps1 -OutputDirectory dist-arkboard-1.21.2
 $verificationFolder = Join-Path $env:TEMP ('ArkBoard-check-' + [Guid]::NewGuid().ToString('N'))
 try {
-    Start-Process .\dist-arkboard-1.21.1\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
+    Start-Process .\dist-arkboard-1.21.2\ArkBoard.exe -ArgumentList '--self-test',('"' + $verificationFolder + '"') -WindowStyle Hidden -Wait
     Get-Content (Join-Path $verificationFolder 'results.txt')
     # Inspect the generated screenshots before removing this temporary folder.
 } finally {
